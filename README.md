@@ -1,6 +1,6 @@
 # finance process
 
-Modules to handle 3 types of processes for data handling of finance data (i.e. OHLC)
+Modules to handle 3 types of processes for data handling of finance data (i.e. OHLC) with pandas
 
 ## 1. Technical Indicator Process
 
@@ -48,7 +48,7 @@ for process in processes:
 
 ## 3. Add Economic Indicator Process (Under Implementation)
 
-Download and store it as csv to utilize it later without network access. Then return Economic indicater values for same time range.
+Download indicater values and store it as a CSV to utilize it later without network access. Then return Economic indicater values for same time range.
 
 ## 4 Planned
 

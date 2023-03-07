@@ -58,11 +58,6 @@ def load_indicaters(params: dict) -> list:
 class MACDProcess(ProcessBase):
     kinds = "MACD"
 
-    KEY_SHORT_EMA = "S_EMA"
-    KEY_LONG_EMA = "L_EMA"
-    KEY_MACD = "MACD"
-    KEY_SIGNAL = "Signal"
-
     def __init__(
         self,
         key="macd",
@@ -85,14 +80,22 @@ class MACDProcess(ProcessBase):
 
         if option is not None:
             self.option.update(option)
-        self.columns = {
-            self.KEY_SHORT_EMA: f"{key}_S_EMA",
-            self.KEY_LONG_EMA: f"{key}_L_EMA",
-            self.KEY_MACD: f"{key}_MACD",
-            self.KEY_SIGNAL: f"{key}_Signal",
-        }
+
+        self.KEY_SHORT_EMA = f"{key}_S_EMA"
+        self.KEY_LONG_EMA = f"{key}_L_EMA"
+        self.KEY_MACD = f"{key}_MACD"
+        self.KEY_SIGNAL = f"{key}_Signal"
         self.is_input = is_input
         self.is_output = is_output
+
+    @property
+    def columns(self):
+        return [
+            self.KEY_SHORT_EMA,
+            self.KEY_LONG_EMA,
+            self.KEY_MACD,
+            self.KEY_SIGNAL,
+        ]
 
     @classmethod
     def load(self, key: str, params: dict):
@@ -114,10 +117,10 @@ class MACDProcess(ProcessBase):
         long_window = option["long_window"]
         signal_window = option["signal_window"]
 
-        cs_ema = self.columns[self.KEY_SHORT_EMA]
-        cl_ema = self.columns[self.KEY_LONG_EMA]
-        c_macd = self.columns[self.KEY_MACD]
-        c_signal = self.columns[self.KEY_SIGNAL]
+        cs_ema = self.KEY_SHORT_EMA
+        cl_ema = self.KEY_LONG_EMA
+        c_macd = self.KEY_MACD
+        c_signal = self.KEY_SIGNAL
 
         if type(data.columns) == pd.MultiIndex:
             if len(symbols) == 0:
@@ -161,10 +164,10 @@ class MACDProcess(ProcessBase):
             long_window = option["long_window"]
             signal_window = option["signal_window"]
 
-            cs_ema = self.columns[self.KEY_SHORT_EMA]
-            cl_ema = self.columns[self.KEY_LONG_EMA]
-            c_macd = self.columns[self.KEY_MACD]
-            c_signal = self.columns[self.KEY_SIGNAL]
+            cs_ema = self.KEY_SHORT_EMA
+            cl_ema = self.KEY_LONG_EMA
+            c_macd = self.KEY_MACD
+            c_signal = self.KEY_SIGNAL
 
             short_ema, long_ema, MACD = technical.update_macd(
                 new_tick=tick,
@@ -184,7 +187,7 @@ class MACDProcess(ProcessBase):
         return self.option["long_window"] + self.option["signal_window"] - 2
 
     def revert(self, data_set: tuple):
-        cs_ema = self.columns["S_EMA"]
+        cs_ema = self.KEY_SHORT_EMA
 
         if type(data_set) == pd.DataFrame:
             if cs_ema in data_set:
@@ -198,18 +201,21 @@ class MACDProcess(ProcessBase):
 
 class EMAProcess(ProcessBase):
     kinds = "EMA"
-    last_data = None
-    KEY_EMA = "EMA"
 
     def __init__(self, key="ema", window=12, column="Close", is_input=True, is_output=True, option=None):
         super().__init__(key)
         self.option = {"column": column, "window": window}
+        self.last_data = None
 
         if option is not None:
             self.option.update(option)
-        self.columns = {self.KEY_EMA: f"{key}_EMA"}
+        self.KEY_EMA = f"{key}_EMA"
         self.is_input = is_input
         self.is_output = is_output
+
+    @property
+    def columns(self):
+        return [self.KEY_EMA]
 
     @classmethod
     def load(self, key: str, params: dict):
@@ -224,7 +230,7 @@ class EMAProcess(ProcessBase):
         option = self.option
         target_column = option["column"]
         window = option["window"]
-        column = self.columns["EMA"]
+        column = self.KEY_EMA
 
         if type(data.columns) == pd.MultiIndex:
             if len(symbols) == 0:
@@ -241,7 +247,7 @@ class EMAProcess(ProcessBase):
         option = self.option
         target_column = option["column"]
         window = option["window"]
-        column = self.columns["EMA"]
+        column = self.KEY_EMA
 
         short_ema, long_ema, MACD = technical.update_ema(new_tick=tick, column=target_column, window=window)
 
@@ -262,26 +268,25 @@ class EMAProcess(ProcessBase):
 
 class BBANDProcess(ProcessBase):
     kinds = "BBAND"
-    last_data = None
-    KEY_MEAN_VALUE = "MV"
-    KEY_UPPER_VALUE = "UV"
-    KEY_LOWER_VALUE = "LV"
-    KEY_WIDTH_VALUE = "Width"
 
     def __init__(self, key="BB", window=14, alpha=2, target_column="Close", is_input=True, is_output=True, option=None):
         super().__init__(key)
         self.option = {"column": target_column, "window": window, "alpha": alpha}
+        self.last_data = None
 
         if option is not None:
             self.option.update(option)
-        self.columns = {
-            self.KEY_MEAN_VALUE: f"{key}_MV",
-            self.KEY_UPPER_VALUE: f"{key}_UV",
-            self.KEY_LOWER_VALUE: f"{key}_LV",
-            self.KEY_WIDTH_VALUE: f"{key}_Width",
-        }
+        self.KEY_MEAN_VALUE = f"{key}_MV"
+        self.KEY_UPPER_VALUE = f"{key}_UV"
+        self.KEY_LOWER_VALUE = f"{key}_LV"
+        self.KEY_WIDTH_VALUE = f"{key}_Width"
+
         self.is_input = is_input
         self.is_output = is_output
+
+    @property
+    def columns(self):
+        return [self.KEY_MEAN_VALUE, self.KEY_UPPER_VALUE, self.KEY_LOWER_VALUE, self.KEY_WIDTH_VALUE]
 
     @classmethod
     def load(self, key: str, params: dict):
@@ -297,10 +302,10 @@ class BBANDProcess(ProcessBase):
         target_column = option["column"]
         window = option["window"]
         alpha = option["alpha"]
-        c_ema = self.columns[self.KEY_MEAN_VALUE]
-        c_ub = self.columns[self.KEY_UPPER_VALUE]
-        c_lb = self.columns[self.KEY_LOWER_VALUE]
-        c_width = self.columns[self.KEY_WIDTH_VALUE]
+        c_ema = self.KEY_MEAN_VALUE
+        c_ub = self.KEY_UPPER_VALUE
+        c_lb = self.KEY_LOWER_VALUE
+        c_width = self.KEY_WIDTH_VALUE
 
         if type(data.columns) == pd.MultiIndex:
             if len(symbols) == 0:
@@ -308,6 +313,7 @@ class BBANDProcess(ProcessBase):
             bb_df = technical.BolingerFromOHLCMulti(
                 symbols,
                 data,
+                column=target_column,
                 window=window,
                 alpha=alpha,
                 grouped_by_symbol=grouped_by_symbol,
@@ -349,10 +355,10 @@ class BBANDProcess(ProcessBase):
         new_lb = new_sma - alpha * std
         new_width = alpha * 2 * std
 
-        c_ema = self.columns[self.KEY_MEAN_VALUE]
-        c_ub = self.columns[self.KEY_UPPER_VALUE]
-        c_lb = self.columns[self.KEY_LOWER_VALUE]
-        c_width = self.columns[self.KEY_WIDTH_VALUE]
+        c_ema = self.KEY_MEAN_VALUE
+        c_ub = self.KEY_UPPER_VALUE
+        c_lb = self.KEY_LOWER_VALUE
+        c_width = self.KEY_WIDTH_VALUE
 
         new_data = pd.Series({c_ema: new_sma, c_ub: new_ub, c_lb: new_lb, c_width: new_width, target_column: tick[target_column]})
         self.last_data = concat(self.last_data.iloc[1:], new_data)
@@ -368,19 +374,23 @@ class BBANDProcess(ProcessBase):
 
 class ATRProcess(ProcessBase):
     kinds = "ATR"
-    last_data = None
-    KEY_ATR = "ATR"
 
-    def __init__(self, key="atr", window=14, ohlc_column_name=("Open", "High", "Low", "Close"), is_input=True, is_output=True, option=None):
+    def __init__(
+        self, key="atr", window=14, ohlc_column_name=("Open", "High", "Low", "Close"), is_input=True, is_output=True, option=None
+    ):
         super().__init__(key)
-        self.available_columns = [self.KEY_ATR]
         self.option = {"ohlc_column": ohlc_column_name, "window": window}
         if option is not None:
             self.option.update(option)
 
-        self.columns = {self.KEY_ATR: f"{key}_ATR"}
+        self.last_data = None
+        self.KEY_ATR = f"{key}_ATR"
         self.is_input = is_input
         self.is_output = is_output
+
+    @property
+    def columns(self):
+        return [self.KEY_ATR]
 
     @classmethod
     def load(self, key: str, params: dict):
@@ -394,7 +404,7 @@ class ATRProcess(ProcessBase):
         option = self.option
         target_columns = option["ohlc_column"]
         window = option["window"]
-        c_atr = self.columns[self.KEY_ATR]
+        c_atr = self.KEY_ATR
 
         if type(data.columns) == pd.MultiIndex:
             if len(symbols) == 0:
@@ -414,7 +424,7 @@ class ATRProcess(ProcessBase):
         option = self.option
         target_columns = option["ohlc_column"]
         window = option["window"]
-        c_atr = self.columns[self.KEY_ATR]
+        c_atr = self.KEY_ATR
 
         pre_data = self.last_data.iloc[-1]
         new_atr_value = technical.update_ATR(pre_data, tick, target_columns, c_atr, window)
@@ -433,22 +443,27 @@ class ATRProcess(ProcessBase):
 
 class RSIProcess(ProcessBase):
     kinds = "RSI"
-    last_data = None
 
-    def __init__(self, key="rsi", window=14, ohlc_column_name=("Open", "High", "Low", "Close"), is_input=True, is_output=True, option=None):
+    def __init__(
+        self, key="rsi", window=14, ohlc_column_name=("Open", "High", "Low", "Close"), is_input=True, is_output=True, option=None
+    ):
         super().__init__(key)
         self.option = {"ohlc_column": ohlc_column_name, "window": window}
 
         if option is not None:
             self.option.update(option)
 
+        self.last_data = None
         self.KEY_RSI = f"{key}_RSI"
         self.KEY_GAIN = f"{key}_AVG_GAIN"
         self.KEY_LOSS = f"{key}_AVG_LOSS"
 
-        self.columns = [self.KEY_GAIN, self.KEY_LOSS, self.KEY_RSI]
         self.is_input = is_input
         self.is_output = is_output
+
+    @property
+    def columns(self):
+        return [self.KEY_GAIN, self.KEY_LOSS, self.KEY_RSI]
 
     @classmethod
     def load(self, key: str, params: dict):
@@ -515,8 +530,6 @@ class RSIProcess(ProcessBase):
 
 class RenkoProcess(ProcessBase):
     kinds = "Renko"
-    KEY_VALUE = "Value"
-    KEY_BRICK_NUM = "NUM"
 
     def __init__(
         self,
@@ -533,10 +546,12 @@ class RenkoProcess(ProcessBase):
             self.option.update(option)
         self.is_input = is_input
         self.is_output = is_output
-        self.columns = {
-            self.KEY_BRICK_NUM: f"{key}BrickNum",
-            self.KEY_VALUE: f"{key}Value",
-        }
+        self.KEY_BRICK_NUM = f"{key}_BrickNum"
+        self.KEY_VALUE = f"{key}_Value"
+
+    @property
+    def columns(self):
+        return [self.KEY_BRICK_NUM, self.KEY_VALUE]
 
     @classmethod
     def load(self, key: str, params: dict):
@@ -551,8 +566,9 @@ class RenkoProcess(ProcessBase):
         ohlc_column = option["ohlc_column"]
         window = option["window"]
 
-        renko_block_num = self.columns[self.KEY_BRICK_NUM]
-        renko_value = self.columns[self.KEY_VALUE]
+        renko_block_num = self.KEY_BRICK_NUM
+        renko_value = self.KEY_VALUE
+
         if type(data.columns) == pd.MultiIndex:
             if len(symbols) == 0:
                 symbols = get_symbols(data, grouped_by_symbol)
@@ -584,7 +600,6 @@ class RenkoProcess(ProcessBase):
 
 class SlopeProcess(ProcessBase):
     kinds = "Slope"
-    KEY_SLOPE = "Slope"
 
     def __init__(self, key: str = "slope", target_column="Close", window=10, is_input=True, is_output=True, option=None):
         super().__init__(key)
@@ -595,7 +610,11 @@ class SlopeProcess(ProcessBase):
             self.option.update(option)
         self.is_input = is_input
         self.is_output = is_output
-        self.columns = {self.KEY_SLOPE: f"{key}_slope"}
+        self.KEY_SLOPE = f"{key}_slope"
+
+    @property
+    def columns(self):
+        return [self.KEY_SLOPE]
 
     @classmethod
     def load(self, key: str, params: dict):
@@ -609,7 +628,7 @@ class SlopeProcess(ProcessBase):
         option = self.option
         column = option["target_column"]
         window = option["window"]
-        out_column = self.columns[self.KEY_SLOPE]
+        out_column = self.KEY_SLOPE
 
         if type(data.columns) == pd.MultiIndex:
             if len(symbols) == 0:
@@ -637,7 +656,6 @@ class SlopeProcess(ProcessBase):
 
 class CCIProcess(ProcessBase):
     kinds = "CCI"
-    KEY_CCI = "CCI"
 
     def __init__(
         self,
@@ -656,7 +674,11 @@ class CCIProcess(ProcessBase):
         self.data = None
         self.is_input = is_input
         self.is_output = is_output
-        self.columns = {self.KEY_CCI: f"{key}_cci"}
+        self.KEY_CCI = f"{key}_cci"
+
+    @property
+    def columns(self):
+        return [self.KEY_CCI]
 
     @classmethod
     def load(self, key: str, params: dict):
@@ -672,7 +694,7 @@ class CCIProcess(ProcessBase):
         window = self.options["window"]
         ohlc_column = self.options["ohlc_column"]
 
-        out_column = self.columns[self.KEY_CCI]
+        out_column = self.KEY_CCI
         if type(data.columns) == pd.MultiIndex:
             if len(symbols) == 0:
                 symbols = get_symbols(data, grouped_by_symbol)
@@ -686,14 +708,16 @@ class CCIProcess(ProcessBase):
 
     def update(self, tick: pd.Series, symbols: list = []):
         if self.data is not None:
-            out_column = self.columns[self.KEY_CCI]
+            out_column = self.KEY_CCI
             self.data = concat(self.data, tick)
             cci = self.run(self.data)
             return cci[out_column].iloc[-1]
         else:
             self.data = tick
             # cci = numpy.nan
-            print(f"CCI failed to update as data length is less than window size: {len(self.data) < {self.get_minimum_required_length()}}")
+            print(
+                f"CCI failed to update as data length is less than window size: {len(self.data) < {self.get_minimum_required_length()}}"
+            )
             return self.data
 
     def get_minimum_required_length(self):
@@ -706,11 +730,10 @@ class CCIProcess(ProcessBase):
 
 class RangeTrendProcess(ProcessBase):
     kinds = "rtp"
-    available_mode = ["bband"]
-    KEY_TREND = "trend"
-    KEY_RANGE = "range"
 
-    def __init__(self, key: str = "rtp", mode="bband", required_columns=[], slope_window=4, is_input=True, is_output=True, option=None):
+    def __init__(
+        self, key: str = "rtp", mode="bband", required_columns=[], slope_window=4, is_input=True, is_output=True, option=None
+    ):
         """Experimental: Process to caliculate likelyfood of market state
         {key}_trend: from -1 to 1. 1 then bull (long position) state is strong, -1 then cow (short position) is strong
         {key}_range: from 0 to 1. possibility of market is in range trading
@@ -725,8 +748,11 @@ class RangeTrendProcess(ProcessBase):
 
         """
         super().__init__(key)
+        self.available_mode = ["bband"]
         if mode not in self.available_mode:
             raise ValueError(f"{mode} is not supported. Please specify one of {self.available_mode}")
+        self.KEY_RANGE = f"{key}_range"
+        self.KEY_TREND = f"{key}_trend"
         self.initialized = False
         self.initialization_required = True
         self.required_length = slope_window + 14 + 1
@@ -744,7 +770,10 @@ class RangeTrendProcess(ProcessBase):
         self.is_output = is_output
         self.__preprocess = None
         self.slope_window = slope_window
-        self.columns = {self.KEY_RANGE: f"{key}_range", self.KEY_TREND: f"{key}_trend"}
+
+    @property
+    def columns(self):
+        return [self.KEY_TREND, self.KEY_RANGE]
 
     def __bb_initialization(self, df: pd.DataFrame, symbols: list, grouped_by_symbol):
         data = df.copy()
@@ -898,14 +927,16 @@ class RangeTrendProcess(ProcessBase):
             possibility_df_list.append(range_possibility_df)
         slope_dfs = pd.concat(slope_df_list, axis=1)
         possibility_dfs = pd.concat(possibility_df_list, axis=1)
-        cls = [self.columns[self.KEY_TREND], self.columns[self.KEY_RANGE]]
-        elements, columns = technical.create_multi_out_lists(symbols, [slope_dfs, possibility_dfs], cls, grouped_by_symbol=grouped_by_symbol)
+        cls = [self.KEY_TREND, self.KEY_RANGE]
+        elements, columns = technical.create_multi_out_lists(
+            symbols, [slope_dfs, possibility_dfs], cls, grouped_by_symbol=grouped_by_symbol
+        )
         out_df = pd.concat(elements, axis=1)
         if self.is_multi_mode:
             out_df.columns = columns
         else:
             out_df.columns = cls
-        return out_df
+        return pd.concat([df, out_df], axis=1)
 
     @classmethod
     def load(self, key: str, params: dict):

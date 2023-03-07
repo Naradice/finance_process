@@ -1,8 +1,8 @@
 import pandas as pd
 
-from ..frames import to_panda_freq
 from .indicaters import indicater_code as ic
 from .indicaters.economic import *
+from .utils import to_panda_freq
 
 __indicaters = {ic.SP500: SP500, ic.PMI: PMI}
 

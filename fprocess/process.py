@@ -6,7 +6,6 @@ import pandas as pd
 class ProcessBase(metaclass=ABCMeta):
 
     def __init__(self, key: str):
-        self.kinds = "base"
         self.key = key
         self.initialization_required = False
 

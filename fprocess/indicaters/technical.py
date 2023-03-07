@@ -96,7 +96,9 @@ def EMA(data, interval, alpha=None):
         raise Exception("data list has no value")
 
 
-def EMAMulti(symbols: list, data: pd.DataFrame, target_column: str, interval: int, alpha=None, grouped_by_symbol=False, ema_name="EMA"):
+def EMAMulti(
+    symbols: list, data: pd.DataFrame, target_column: str, interval: int, alpha=None, grouped_by_symbol=False, ema_name="EMA"
+):
     df = data.copy()
     if grouped_by_symbol is False:
         df = df[target_column][symbols]
@@ -226,7 +228,9 @@ def MACDFromOHLC(
     long_ema = EMA(data[column], long_window)
     MACD, Signal = MACDFromEMA(short_ema, long_ema, signal_window)
 
-    elements, columns = __create_out_lists([short_ema, long_ema, MACD, Signal], [short_ema_name, long_ema_name, macd_name, signal_name])
+    elements, columns = __create_out_lists(
+        [short_ema, long_ema, MACD, Signal], [short_ema_name, long_ema_name, macd_name, signal_name]
+    )
 
     macd_df = pd.concat(elements, axis=1)
     macd_df.columns = columns
@@ -376,12 +380,17 @@ def BolingerFromOHLCMulti(
     )
     b_df = pd.concat(elements, axis=1)
     b_df.columns = columns
-    b_df.sort_index(level=0, axis=1, inplace=True)
     return b_df
 
 
 def ATRFromMultiOHLC(
-    symbols: list, data: pd.DataFrame, ohlc_columns=("Open", "High", "Low", "Close"), window=14, grouped_by_symbol=False, tr_name="TR", atr_name="ATR"
+    symbols: list,
+    data: pd.DataFrame,
+    ohlc_columns=("Open", "High", "Low", "Close"),
+    window=14,
+    grouped_by_symbol=False,
+    tr_name="TR",
+    atr_name="ATR",
 ):
     high_cn = ohlc_columns[1]
     low_cn = ohlc_columns[2]
@@ -434,7 +443,9 @@ def ATRFromOHLC(data: pd.DataFrame, ohlc_columns=("Open", "High", "Low", "Close"
     return df[[tr_name, atr_name]].copy()
 
 
-def update_ATR(pre_data: pd.Series, new_data: pd.Series, ohlc_columns=("Open", "High", "Low", "Close"), atr_column="ATR", window=14):
+def update_ATR(
+    pre_data: pd.Series, new_data: pd.Series, ohlc_columns=("Open", "High", "Low", "Close"), atr_column="ATR", window=14
+):
     """latest caliculate atr
 
     Args:
@@ -459,7 +470,9 @@ def update_ATR(pre_data: pd.Series, new_data: pd.Series, ohlc_columns=("Open", "
     return atr
 
 
-def RSIFromOHLC(data: pd.DataFrame, column="Close", window=14, mean_gain_name="AvgGain", mean_loss_name="AvgLoss", rsi_name="Rsi"):
+def RSIFromOHLC(
+    data: pd.DataFrame, column="Close", window=14, mean_gain_name="AvgGain", mean_loss_name="AvgLoss", rsi_name="Rsi"
+):
     """
     RSI is a momentum oscillator which measures the speed and change od price movements
 
@@ -703,9 +716,13 @@ def RenkoFromOHLC(
                 brick_size = atr_df["ATR"]
             else:
                 brick_size = df[brick_column_name]
-            renko_df = RenkoFromSeries(df[ohlc_columns[3]], brick_size=brick_size, total_brick_name=total_brick_name, brick_num_name=brick_num_name)
+            renko_df = RenkoFromSeries(
+                df[ohlc_columns[3]], brick_size=brick_size, total_brick_name=total_brick_name, brick_num_name=brick_num_name
+            )
         else:
-            renko_df = RenkoFromSeries(df[ohlc_columns[3]], brick_size=brick_size, total_brick_name=total_brick_name, brick_num_name=brick_num_name)
+            renko_df = RenkoFromSeries(
+                df[ohlc_columns[3]], brick_size=brick_size, total_brick_name=total_brick_name, brick_num_name=brick_num_name
+            )
         return renko_df
     else:
         raise Exception(f"specified ohlc_columns {ohlc_columns} doen't match with df.columns {df.columns}")
@@ -741,7 +758,9 @@ def RenkoFromMultiOHLC(
     is_series_brick = False
     if brick_size is None:
         if brick_size_column is None:
-            atr_dfs = ATRFromMultiOHLC(symbols, dfs, ohlc_columns, window=atr_window, grouped_by_symbol=grouped_by_symbol, atr_name="ATR")
+            atr_dfs = ATRFromMultiOHLC(
+                symbols, dfs, ohlc_columns, window=atr_window, grouped_by_symbol=grouped_by_symbol, atr_name="ATR"
+            )
             if grouped_by_symbol:
                 brick_sizes = atr_dfs[[(symbol, "ATR") for symbol in symbols]]
                 brick_sizes.columns = symbols
@@ -762,11 +781,19 @@ def RenkoFromMultiOHLC(
         for symbol in symbols:
             if is_series_brick:
                 DFS[symbol] = RenkoFromOHLC(
-                    dfs[symbol], ohlc_columns, brick_size=brick_sizes[symbol], total_brick_name=total_brick_name, brick_num_name=brick_num_name
+                    dfs[symbol],
+                    ohlc_columns,
+                    brick_size=brick_sizes[symbol],
+                    total_brick_name=total_brick_name,
+                    brick_num_name=brick_num_name,
                 )
             else:
                 DFS[symbol] = RenkoFromOHLC(
-                    dfs[symbol], ohlc_columns, brick_size=brick_size, total_brick_name=total_brick_name, brick_num_name=brick_num_name
+                    dfs[symbol],
+                    ohlc_columns,
+                    brick_size=brick_size,
+                    total_brick_name=total_brick_name,
+                    brick_num_name=brick_num_name,
                 )
     else:
         for symbol in symbols:
@@ -774,11 +801,19 @@ def RenkoFromMultiOHLC(
             ohlc_df = dfs[_ohlc_columns]
             if is_series_brick:
                 DFS[symbol] = RenkoFromOHLC(
-                    ohlc_df, _ohlc_columns, brick_size=brick_sizes[symbol], total_brick_name=total_brick_name, brick_num_name=brick_num_name
+                    ohlc_df,
+                    _ohlc_columns,
+                    brick_size=brick_sizes[symbol],
+                    total_brick_name=total_brick_name,
+                    brick_num_name=brick_num_name,
                 )
             else:
                 DFS[symbol] = RenkoFromOHLC(
-                    ohlc_df, _ohlc_columns, brick_size=brick_size, total_brick_name=total_brick_name, brick_num_name=brick_num_name
+                    ohlc_df,
+                    _ohlc_columns,
+                    brick_size=brick_size,
+                    total_brick_name=total_brick_name,
+                    brick_num_name=brick_num_name,
                 )
 
     RenkoDF = pd.concat(DFS.values(), axis=1, keys=DFS.keys())
@@ -871,7 +906,9 @@ def __CCI(ohlc: pd.DataFrame, window=14, ohlc_columns=("Open", "High", "Low", "C
     return cci
 
 
-def CommodityChannelIndex(ohlc: pd.DataFrame, window=14, ohlc_columns=("Open", "High", "Low", "Close"), cci_name="CCI") -> pd.DataFrame:
+def CommodityChannelIndex(
+    ohlc: pd.DataFrame, window=14, ohlc_columns=("Open", "High", "Low", "Close"), cci_name="CCI"
+) -> pd.DataFrame:
     """represents how much close value is far from mean value. If over 100, strong long trend for example.
 
     Args:
@@ -887,7 +924,12 @@ def CommodityChannelIndex(ohlc: pd.DataFrame, window=14, ohlc_columns=("Open", "
 
 
 def CommodityChannelIndexMulti(
-    symbols: list, ohlc: pd.DataFrame, window=14, ohlc_columns=("Open", "High", "Low", "Close"), grouped_by_sygnal: bool = False, cci_name="CCI"
+    symbols: list,
+    ohlc: pd.DataFrame,
+    window=14,
+    ohlc_columns=("Open", "High", "Low", "Close"),
+    grouped_by_sygnal: bool = False,
+    cci_name="CCI",
 ) -> pd.DataFrame:
     """represents how much close value is far from mean value. If over 100, strong long trend for example.
 
