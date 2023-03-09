@@ -1,5 +1,8 @@
 from collections.abc import Iterable
+from datetime import time
+import warnings
 
+import numpy as np
 import pandas as pd
 
 from . import convert, standalization
@@ -59,7 +62,20 @@ def _get_columns(df, columns, symbols=None, grouped_by_symbol=True):
                 print(f"skip {i_columns} on ignore column process of minmax")
     else:
         target_columns = columns
-    return target_columns
+        remaining_column = list(set(df.columns) - set(target_columns))
+    return target_columns, remaining_column
+
+
+def _concat_target_and_remain(original_df, processed_df, remaining_columns):
+    original_columns = original_df.columns
+    if remaining_columns is not None and len(remaining_columns) > 0:
+        remaining_data = original_df[remaining_columns]
+        data = pd.concat([processed_df, remaining_data], axis=1)
+        # revert columns order to original
+        data = data[original_columns]
+    else:
+        data = processed_df
+    return data
 
 
 class DiffPreProcess(ProcessBase):
@@ -68,27 +84,34 @@ class DiffPreProcess(ProcessBase):
     def __init__(
         self,
         target_columns=None,
-        floor: int = 1,
+        periods: int = 1,
         key="diff",
     ):
         super().__init__(key)
         self.columns = target_columns
-        self.floor = floor
+        self.periods = periods
         self.last_tick = None
 
     @property
     def option(self):
-        return {"floor": self.floor, "target_columns": self.columns}
+        return {"periods": self.periods, "target_columns": self.columns}
 
     @classmethod
     def load(self, key: str, params: dict):
         return DiffPreProcess(key, **params)
 
-    def run(self, data: pd.DataFrame) -> dict:
+    def run(self, df: pd.DataFrame) -> dict:
+        remaining_columns = None
         if self.columns is not None:
-            data = data[self.columns]
-        self.last_ticks = data.iloc[-self.floor :]
-        return data.diff(periods=self.floor)
+            target_columns, remaining_columns = _get_columns(df, self.columns)
+            temp_data = df[target_columns]
+        else:
+            temp_data = df
+        self.first_ticks = df.iloc[: self.periods]
+        self.last_ticks = df.iloc[-self.periods :]
+        temp_data = temp_data.diff(periods=self.periods)
+        data = _concat_target_and_remain(df, temp_data, remaining_columns)
+        return data
 
     def update(self, tick: pd.Series):
         """assuming data is previous result of run()
@@ -98,72 +121,163 @@ class DiffPreProcess(ProcessBase):
             tick (pd.Series): new row data
             option (Any, optional): Currently no option (Floor may be added later). Defaults to None.
         """
-        new_data = tick - self.last_ticks.iloc[-self.floor]
-        self.last_ticks = pd.concat([self.last_ticks[-self.floor + 1 :], tick])
+        new_data = tick - self.last_ticks.iloc[-self.periods]
+        self.last_ticks = pd.concat([self.last_ticks[-self.periods + 1 :], tick])
         return new_data
 
     def get_minimum_required_length(self):
-        return self.floor
+        return self.periods
 
-    def revert(self, data_set: tuple):
-        if self.columns is None:
-            columns = self.last_tick.columns
-        else:
-            columns = self.columns
+    def revert(self, data, base_values=None):
+        columns = self.first_ticks.columns
 
-        result = []
-        if type(data_set) == pd.DataFrame:
-            data_set = tuple(data_set[column] for column in columns)
-        if len(data_set) == len(columns):
-            for i in range(0, len(columns)):
-                last_data = self.last_tick[columns[i]]
-                data = data_set[i]
-                row_data = [last_data]
-                for index in range(len(data) - 1, -1, -1):
-                    last_data = data[index] - last_data
-                    row_data.append(last_data)
-                row_data = reversed(row_data)
-                result.append(row_data)
-            return True, result
+        if isinstance(data, pd.DataFrame):
+            available_columns = []
+            for column in data.columns:
+                if column in columns:
+                    available_columns.append(column)
+                    
+            if len(available_columns) > 0:
+                if base_values is None:
+                    base_values = self.first_ticks[available_columns]
+                r_data = np.zeros_like(data)
+                for start_index in range(self.periods):
+                    temp_values = data[start_index :: self.periods].cumsum().fillna(0)
+                    r_data[start_index :: self.periods] = temp_values + base_values.iloc[start_index]
+                return pd.DataFrame(r_data, index=data.index, columns=available_columns)
+            else:
+                raise ValueError(f"data has different columns: {data.columns} is not part of {columns}")
+        elif isinstance(data, np.ndarray):
+            if len(data.shape) > 2:
+                if base_values is None:
+                    raise ValueError("base_value must be specified. Default is to revert entire data.")
+                axis = 0
+            else:
+                axis = 0
+                if base_values is None:
+                    base_values = self.first_ticks.values
+                    if len(data.shape) == 2 and data.shape[1] != len(columns):
+                        feature_size = data.shape[1]
+                        if feature_size > len(columns):
+                            raise ValueError(f"can't determin column axis in the positions")
+                        columns = columns[feature_size]
+                        warnings.warn(f"assume axis=1:{data.shape[1]} is a part of columns")
+
+            r_data = np.zeros_like(data)
+            for start_index in range(self.periods):
+                temp_values = np.cumsum(data[start_index :: self.periods], axis=axis)
+                temp_values = np.nan_to_num(temp_values)
+                r_data[start_index :: self.periods] = temp_values + base_values
+            return r_data
+
         else:
-            raise Exception("number of data is different")
+            raise TypeError(f"type {type(data)} is not supported.")
 
 
 class LogPreProcess(ProcessBase):
     kinds = "Log"
 
-    def __init__(self, key: str = "log"):
-        super().__init__(key)
+    def __log(self, df: pd.DataFrame, columns: list):
+        return df[columns].apply(np.log)
 
-    def run(self):
-        pass
+    def __exp(self, values):
+        return np.exp(values)
 
-    def revert(self):
-        pass
+    def __init__(self, columns: list = None, e=None):
+        """Apply np.log for specified columns
+
+        Args:
+            columns (list, optional): target columns to apply np.log. Defaults to None and apply entire columns
+            e (int, optional): base of log. Defaults to None and exp is used.
+        """
+        super().__init__("log")
+        self.columns = columns
+        if e is not None:
+            log_base_value = np.log(e)
+            if log_base_value == np.inf:
+                log_base_value = np.log(float(e))
+                self.__log = lambda df, columns: df[columns].apply(np.log) / np.log(float(e))
+                self.__exp = lambda values: float(e) ** values
+            else:
+                self.__log = lambda df, columns: df[columns].apply(np.log) / np.log(e)
+                self.__exp = lambda values: e**values
+
+    def run(self, df: pd.DataFrame):
+        target_columns, remaining_columns = _get_columns(df, self.columns)
+        data = self.__log(df, target_columns)
+        data = _concat_target_and_remain(df, data, remaining_columns)
+        return data
+
+    def revert(self, data):
+        if isinstance(data, pd.DataFrame):
+            data.apply(np.exp)
 
     def get_minimum_required_length(self):
         return 1
 
 
-class DiffIDPreProcess(ProcessBase):
-    kinds = "CandleID"
-
-    def __init__(self, key: str):
-        super().__init__(key)
-
-
 class IDPreProcess(ProcessBase):
     kinds = "ID"
 
-    def __init__(self, key: str):
-        super().__init__(key)
+    def __init__(self, columns: list, round_digits=None, decimal_digits=None):
+        """Convert Numeric values to ID (0 to X)
+
+        Args:
+            columns (list): _description_
+            round_digits(int, optional): Reduce digits by rounding the value. Ex.) round_digits=2 for 10324 become 103:
+            decimal_digits(int, optional): Recud decimal digits by rounding the value. Ex.) decimal_digits=3 for 3.14159265 become 3142:
+        """
+        super().__init__("id")
 
 
-class CloseDiffPreProcess(ProcessBase):
-    kinds = "CDiff"
+class MultiFeatureIDPreProcess(IDPreProcess):
+    kinds = "MFID"
 
-    def __init__(self, key: str):
-        super().__init__(key)
+    def __init__(self, columns: list, round_digits=None, decimal_digits=None):
+        """Convert Numeric values to ID (0 to X) based on each columns
+        Ex.) Data have MultiIndex[(USDJPY, Open), (USDJPY, Close),(USDJPY, Volume) (USDCHF, Open), (USDCHF, Close), (USDCHF, Volume)] as columns
+        If [Open, Close] is specified, a minimum value is caliulated based on [Open, Close] values for each symbol. Then convert the values to IDs.
+        Thus, Open ID and Close ID has same value for the symbol
+
+        Args:
+            columns (list): _description_
+            round_digits(int, optional): Reduce digits by rounding the value. Ex.) round_digits=2 for 10324 become 103:
+            decimal_digits(int, optional): Recud decimal digits by rounding the value. Ex.) decimal_digits=3 for 3.14159265 become 3142:
+        """
+        super().__init__("mfid")
+
+
+class SimpleColumnDiffPreProcess(ProcessBase):
+    kinds = "SCDiff"
+
+    def __init__(self, base_column: str = "close", target_columns: list = ["open", "high", "low", "close"]):
+        """Simply caliculate diff: df[target_columns].iloc[1:] - df[base_column].iloc[:-1].values
+        Assume base_column is close and target_columns is [open, high, low, close]
+
+        Args:
+            base_column (str, optional): Defaults to "close"
+            target_columns (list, optional): Defaults to ["open", "high", "low", "close"].
+        """
+        super().__init__("scdiff")
+
+
+class DailyCloseDiffPreProcess(ProcessBase):
+    kinds = "DCDiff"
+
+    def __init__(self, ohlc_columns=["open", "high", "low", "close"], last_datetime: time = None):
+        """Caliculate Diff based on last Close value of one day before
+
+
+        Args:
+            ohlc_columns (list, optional): _description_. Defaults to ["open", "high", "low", "close"].
+        """
+        super().__init__("dcdiff")
+
+    def run(self, df):
+        pass
+
+    def revert(self, data):
+        pass
 
 
 class MinMaxPreProcess(ProcessBase):
@@ -177,7 +291,8 @@ class MinMaxPreProcess(ProcessBase):
         Args:
             key (str, optional): identification of this process. Defaults to 'minmax'.
             scale (tuple, optional): minimax scale. Defaults to (-1, 1).
-            min_value, max_value (dict, optional):  {{column_name: min/max value}}. Defaults to None and caliculate by provided data when run this process.
+            min_value, max_value (dict, optional):  {{column_name: min/max value}}. Defaults to None and caliculate
+            by provided data when run this process.
             columns (list, optional): specify column to ignore applying minimax or revert process. Defaults to []
         """
         super().__init__(key)
@@ -305,4 +420,26 @@ class MinMaxPreProcess(ProcessBase):
 
 
 class STDPreProcess(ProcessBase):
-    pass
+    kinds = "STD"
+
+    def __init__(self):
+        super().__init__("std")
+
+    def run(self, df):
+        return df
+
+    def revert(self, data):
+        return data
+
+
+class PCTChange(ProcessBase):
+    kinds = "PCTC"
+
+    def __init__(self):
+        super().__init__("pctc")
+
+    def run(self, df):
+        return df
+
+    def revert(self, data):
+        return data

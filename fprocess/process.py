@@ -4,7 +4,6 @@ import pandas as pd
 
 
 class ProcessBase(metaclass=ABCMeta):
-
     def __init__(self, key: str):
         self.key = key
         self.initialization_required = False
@@ -16,6 +15,9 @@ class ProcessBase(metaclass=ABCMeta):
     def initialize(self, symbols: list, data: pd.DataFrame, grouped_by_symbol=False):
         print("initialization of base class is called. please create initialize function on your process.")
         pass
+
+    def __call__(self, *args, **kwds):
+        return self.run(*args, **kwds)
 
     @abstractmethod
     def run(self, symbols: list, data: pd.DataFrame, grouped_by_symbol=False) -> dict:
