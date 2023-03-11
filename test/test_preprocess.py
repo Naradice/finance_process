@@ -28,7 +28,14 @@ class TestPreProcess(unittest.TestCase):
             if np.isnan(process_value) and np.isnan(exp_value):
                 continue
             self.assertTrue(process_value == exp_value, f"{process_value} != {exp_value} on {i}")
-    
+
+    def test_diff_with_columns(self):
+        periods = 1
+        dprorcess = preprocess.DiffPreProcess(periods=periods, columns=["close"])
+        diff_data = dprorcess(self.org_data)
+        self.assertEqual(len(self.org_data.columns), len(diff_data.columns))
+        self.assertTrue((self.org_data.columns == diff_data.columns).all())
+
     def test_revert_diff(self):
         periods = 1
         dprorcess = preprocess.DiffPreProcess(periods=periods)
@@ -39,6 +46,17 @@ class TestPreProcess(unittest.TestCase):
             process_value = r_data[sample_column].iloc[i]
             exp_value = self.org_data[sample_column].iloc[i]
             self.assertTrue(process_value == exp_value, f"{process_value} != {exp_value} on {i}")
+
+    def test_save_processes(self):
+        file_name = "./preprocess.json"
+        dprorcess = preprocess.DiffPreProcess(periods=1, columns=["open", "high", "low", "close"])
+        dprorcess2 = preprocess.DiffPreProcess(periods=2, columns=["volume"])
+        processes = [dprorcess, dprorcess2]
+        preprocess.save_preprocesses(processes)
+        self.assertTrue(os.path.exists(file_name))
+        loaded_processes = preprocess.load_preprocess(file_name)
+        self.assertTrue(processes == loaded_processes)
+
 
 if __name__ == "__main__":
     unittest.main()

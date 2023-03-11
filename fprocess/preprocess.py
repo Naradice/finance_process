@@ -1,5 +1,8 @@
 from collections.abc import Iterable
 from datetime import time
+from typing import Union
+import json
+import os
 import warnings
 
 import numpy as np
@@ -31,11 +34,26 @@ def preprocess_to_params(processes: list) -> dict:
     return params
 
 
-def load_preprocess(params: dict) -> list:
+def save_preprocesses(processes: list, file_name: str = None):
+    params = preprocess_to_params(processes)
+    if file_name is None:
+        file_name = os.path.join(os.getcwd(), "preprocess.json")
+    with open(file_name, mode="w") as fp:
+        json.dump(params, fp)
+
+
+def load_preprocess(arg: Union[str, dict]) -> list:
+    if type(arg) is str:
+        with open(arg, mode="r") as fp:
+            params = json.load(fp)
+    elif type(arg) is dict:
+        params = arg
+    else:
+        raise TypeError(f"argument should be str or dict. {type(arg)} is provided.")
     ips_dict = get_available_processes()
     pss = []
     for key, param in params.items():
-        kinds = param["kinds"]
+        kinds = param.pop("kinds")
         ps = ips_dict[kinds]
         ps = ps.load(key, param)
         pss.append(ps)
@@ -83,22 +101,24 @@ class DiffPreProcess(ProcessBase):
 
     def __init__(
         self,
-        target_columns=None,
         periods: int = 1,
-        key="diff",
+        columns=None,
+        key: str = None,
     ):
+        if key is None:
+            key = f"diff_{periods}"
         super().__init__(key)
-        self.columns = target_columns
+        self.columns = columns
         self.periods = periods
         self.last_tick = None
 
     @property
     def option(self):
-        return {"periods": self.periods, "target_columns": self.columns}
+        return {"periods": self.periods, "columns": self.columns}
 
     @classmethod
     def load(self, key: str, params: dict):
-        return DiffPreProcess(key, **params)
+        return DiffPreProcess(**params, key=key)
 
     def run(self, df: pd.DataFrame) -> dict:
         remaining_columns = None
@@ -126,7 +146,7 @@ class DiffPreProcess(ProcessBase):
         return new_data
 
     def get_minimum_required_length(self):
-        return self.periods
+        return self.periods + 1
 
     def revert(self, data, base_values=None):
         columns = self.first_ticks.columns
@@ -136,7 +156,7 @@ class DiffPreProcess(ProcessBase):
             for column in data.columns:
                 if column in columns:
                     available_columns.append(column)
-                    
+
             if len(available_columns) > 0:
                 if base_values is None:
                     base_values = self.first_ticks[available_columns]
@@ -209,8 +229,7 @@ class LogPreProcess(ProcessBase):
         return data
 
     def revert(self, data):
-        if isinstance(data, pd.DataFrame):
-            data.apply(np.exp)
+        return self.__exp(data)
 
     def get_minimum_required_length(self):
         return 1
