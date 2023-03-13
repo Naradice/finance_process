@@ -18,6 +18,7 @@ class TestPreProcess(unittest.TestCase):
             index_col=0,
             parse_dates=True,
         )
+        self.ohlc_columns = ["open", "high", "low", "close"]
         super().__init__(methodName)
 
     def test_diff_process(self):
