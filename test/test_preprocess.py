@@ -13,8 +13,11 @@ from fprocess import preprocess
 
 class TestPreProcess(unittest.TestCase):
     def __init__(self, methodName: str = ...) -> None:
-        self.org_data = pd.read_csv(os.path.join(os.path.dirname(__file__), "sample_data.csv"), index_col=0, parse_dates=True)
-        self.ohlc_columns = ["open", "high", "low", "close"]
+        self.org_data = pd.read_csv(
+            os.path.join(os.path.dirname(__file__), "sample_data.csv"),
+            index_col=0,
+            parse_dates=True,
+        )
         super().__init__(methodName)
 
     def test_diff_process(self):
@@ -33,6 +36,13 @@ class TestPreProcess(unittest.TestCase):
                 continue
             self.assertTrue(process_value == exp_value, f"{process_value} != {exp_value} on {i}")
 
+    def test_diff_with_columns(self):
+        periods = 1
+        dprorcess = preprocess.DiffPreProcess(periods=periods, columns=["close"])
+        diff_data = dprorcess(self.org_data)
+        self.assertEqual(len(self.org_data.columns), len(diff_data.columns))
+        self.assertTrue((self.org_data.columns == diff_data.columns).all())
+
     def test_revert_diff(self):
         periods = 1
         dprorcess = preprocess.DiffPreProcess(periods=periods)
@@ -42,7 +52,14 @@ class TestPreProcess(unittest.TestCase):
         for i in range(0, len(self.org_data)):
             process_value = r_data[sample_column].iloc[i]
             exp_value = self.org_data[sample_column].iloc[i]
-            self.assertTrue(process_value == exp_value, f"{process_value} != {exp_value} on {i}")
+            self.assertTrue(
+                process_value == exp_value, f"{process_value} != {exp_value} on {i}"
+            )
+
+    def test_id_process(self):
+        idprocess = preprocess.IDPreProcess(columns=["open", "close"])
+        id_df = idprocess(self.org_data)
+        print(id_df)
 
     def test_log_process(self):
         lprocess = preprocess.LogPreProcess(columns=self.ohlc_columns)
