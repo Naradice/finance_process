@@ -13,10 +13,14 @@ class ProcessBase(metaclass=ABCMeta):
         raise Exception("Need to implement")
 
     def initialize(self, symbols: list, data: pd.DataFrame, grouped_by_symbol=False):
-        print("initialization of base class is called. please create initialize function on your process.")
+        print(
+            "initialization of base class is called. please create initialize function on your process."
+        )
         pass
 
     def __call__(self, *args, **kwds):
+        if self.initialization_required:
+            self.initialize(*args, **kwds)
         return self.run(*args, **kwds)
 
     @abstractmethod
