@@ -229,6 +229,12 @@ class LogPreProcess(ProcessBase):
         return data
 
     def revert(self, data):
+        if isinstance(data, pd.DataFrame):
+            target_columns, remaining_columns = _get_columns(data, self.columns)
+            log_data = data[target_columns]
+            r_data = self.__exp(log_data)
+            r_data = _concat_target_and_remain(data, r_data, remaining_columns)
+            return r_data
         return self.__exp(data)
 
     def get_minimum_required_length(self):
@@ -403,28 +409,28 @@ class MinMaxPreProcess(ProcessBase):
     def get_minimum_required_length(self):
         return 1
 
-    def revert(self, data_set):
+    def revert(self, data):
         """revert data minimaxed by this process
 
         Args:
-            data_set (DataFrame|Series): _description_
+            data (DataFrame|Series): log data
 
         Returns:
            reverted data. type is same as input
         """
 
-        if isinstance(data_set, pd.DataFrame):
-            data_set = data_set[self.columns]
+        if isinstance(data, pd.DataFrame):
+            data = data[self.columns]
             _min = pd.Series(self.min_values)
             _max = pd.Series(self.max_values)
-            return standalization.revert_mini_max(data_set, _min, _max, self.scale)
-        elif isinstance(data_set, pd.Series):
-            column = data_set.name
+            return standalization.revert_mini_max(data, _min, _max, self.scale)
+        elif isinstance(data, pd.Series):
+            column = data.name
             if column in self.columns:
                 _min = self.min_values[column]
                 _max = self.max_values[column]
             else:
-                columns = data_set.index
+                columns = data.index
                 _min = []
                 _max = []
                 for column in columns:
@@ -433,9 +439,9 @@ class MinMaxPreProcess(ProcessBase):
                         _max.append(self.max_values[column])
                 _min = pd.Series(_min, index=columns)
                 _max = pd.Series(_max, index=columns)
-            return standalization.revert_mini_max_from_series(data_set, _min, _max, self.scale)
+            return standalization.revert_mini_max_from_series(data, _min, _max, self.scale)
         else:
-            print(f"type{data_set} is not supported")
+            print(f"type{data} is not supported")
 
 
 class STDPreProcess(ProcessBase):
