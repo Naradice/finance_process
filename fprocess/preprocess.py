@@ -75,13 +75,9 @@ def _get_columns(df, columns, symbols=None, grouped_by_symbol=True):
         for i_columns in columns:
             if type(i_columns) is str:
                 if grouped_by_symbol:
-                    target_columns += [
-                        (__symbol, i_columns) for __symbol in target_symbols
-                    ]
+                    target_columns += [(__symbol, i_columns) for __symbol in target_symbols]
                 else:
-                    target_columns += [
-                        (i_columns, __symbol) for __symbol in target_symbols
-                    ]
+                    target_columns += [(i_columns, __symbol) for __symbol in target_symbols]
             elif isinstance(i_columns, Iterable) and len(i_columns) == 2:
                 target_columns.append(i_columns)
             else:
@@ -171,20 +167,14 @@ class DiffPreProcess(ProcessBase):
                 r_data = np.zeros_like(data)
                 for start_index in range(self.periods):
                     temp_values = data[start_index :: self.periods].cumsum().fillna(0)
-                    r_data[start_index :: self.periods] = (
-                        temp_values + base_values.iloc[start_index]
-                    )
+                    r_data[start_index :: self.periods] = temp_values + base_values.iloc[start_index]
                 return pd.DataFrame(r_data, index=data.index, columns=available_columns)
             else:
-                raise ValueError(
-                    f"data has different columns: {data.columns} is not part of {columns}"
-                )
+                raise ValueError(f"data has different columns: {data.columns} is not part of {columns}")
         elif isinstance(data, np.ndarray):
             if len(data.shape) > 2:
                 if base_values is None:
-                    raise ValueError(
-                        "base_value must be specified. Default is to revert entire data."
-                    )
+                    raise ValueError("base_value must be specified. Default is to revert entire data.")
                 axis = 0
             else:
                 axis = 0
@@ -193,13 +183,9 @@ class DiffPreProcess(ProcessBase):
                     if len(data.shape) == 2 and data.shape[1] != len(columns):
                         feature_size = data.shape[1]
                         if feature_size > len(columns):
-                            raise ValueError(
-                                f"can't determin column axis in the positions"
-                            )
+                            raise ValueError(f"can't determin column axis in the positions")
                         columns = columns[feature_size]
-                        warnings.warn(
-                            f"assume axis=1:{data.shape[1]} is a part of columns"
-                        )
+                        warnings.warn(f"assume axis=1:{data.shape[1]} is a part of columns")
 
             r_data = np.zeros_like(data)
             for start_index in range(self.periods):
@@ -234,9 +220,7 @@ class LogPreProcess(ProcessBase):
             log_base_value = np.log(e)
             if log_base_value == np.inf:
                 log_base_value = np.log(float(e))
-                self.__log = lambda df, columns: df[columns].apply(np.log) / np.log(
-                    float(e)
-                )
+                self.__log = lambda df, columns: df[columns].apply(np.log) / np.log(float(e))
                 self.__exp = lambda values: float(e) ** values
             else:
                 self.__log = lambda df, columns: df[columns].apply(np.log) / np.log(e)
@@ -285,9 +269,7 @@ class IDPreProcess(ProcessBase):
             else:
                 raise ValueError("decimals must have same length as columns specified.")
         else:
-            raise TypeError(
-                f"decimans should be int or list. {type(decimals)} is specified."
-            )
+            raise TypeError(f"decimans should be int or list. {type(decimals)} is specified.")
         self.columns = columns
         self.initialization_required = True
 
@@ -295,18 +277,27 @@ class IDPreProcess(ProcessBase):
         org_columns = df.columns
         target_columns, remaining_columns = _get_columns(df, self.columns)
         temp_data = df[target_columns]
-        if self.decimals is not None:
+        if self.decimals is not None and self.decimals != 0:
             if type(self.decimals) is int:
-                temp_data = temp_data.round(self.decimals) * 10**-self.decimals
+                if self.decimals >= 0:
+                    temp_data = temp_data.round(self.decimals)
+                temp_data = temp_data * 10**-self.decimals
             else:
                 temp_dfs = []
                 for index in range(len(self.decimals)):
+                    decimal = self.decimals[index]
                     column = self.columns[index]
-                    decimal = decimal[index]
-                    temp_df = temp_data[column].round(decimal) * 10**-self.decimals
-                    temp_dfs.append(temp_df)
+                    if decimal is not None and self.decimals != 0:
+                        temp_df = temp_data[column].round(decimal) * 10**-self.decimals
+                        if self.decimals >= 0:
+                            temp_df = temp_df.round(self.decimals)
+                        temp_df = temp_df * 10**-self.decimals
+
+                        temp_dfs.append(temp_df)
+                    else:
+                        temp_dfs.append(df[column])
                 temp_data = pd.concat(temp_dfs, axis=1)
-        id_df = temp_data + self.min_values.abs()
+        id_df = temp_data + self.base_values
         id_df = id_df.astype(self.int_type)
         remaining_df = df[remaining_columns]
         df = pd.concat([id_df, remaining_df], axis=1)
@@ -319,26 +310,43 @@ class IDPreProcess(ProcessBase):
             self.columns = df.columns
         params = {}
         df = df[self.columns]
-        if self.decimals is not None:
+        if self.decimals is not None and self.decimals != 0:
             if type(self.decimals) is int:
-                df = df.round(self.decimals) * 10**-self.decimals
+                if self.decimals >= 0:
+                    df = df.round(self.decimals)
+                df = df * 10**-self.decimals
             else:
                 temp_dfs = []
                 for index in range(len(self.decimals)):
-                    decimal = decimal[index]
+                    decimal = self.decimals[index]
                     column = self.columns[index]
-                    if decimal is not None:
+                    if decimal is not None and self.decimals != 0:
                         temp_df = df[column].round(decimal) * 10**-self.decimals
+                        if self.decimals >= 0:
+                            temp_df = temp_df.round(self.decimals)
+                        temp_df = temp_df * 10**-self.decimals
+
                         temp_dfs.append(temp_df)
                     else:
                         temp_dfs.append(df[column])
                 df = pd.concat(temp_dfs, axis=1)
-        self.min_values = df.min()
-        self.value_ranges = df.max() + self.min_values.abs()
-        a_max_value = self.value_ranges.max().max()
-        if a_max_value > 32768:
+        min_values = df.min()
+        bases = []
+        columns = []
+        base_value_p = min_values[min_values > 0]
+        if len(base_value_p) > 0:
+            bases.extend(-base_value_p.values)
+            columns.extend(base_value_p.index.values)
+        base_value_n = min_values[min_values <= 0]
+        if len(base_value_n) > 0:
+            bases.extend(base_value_n.abs().values)
+            columns.extend(base_value_n.index.values)
+        self.base_values = pd.Series(bases, index=columns)
+        self.value_ranges = df.max() + self.base_values
+        a_max_value = self.value_ranges.max()
+        if a_max_value < 32768:
             self.int_type = "int16"
-        elif a_max_value > 2147483648:
+        elif a_max_value < 2147483648:
             self.int_type = "int32"
         else:
             self.int_type = "int64"
@@ -383,9 +391,7 @@ class SimpleColumnDiffPreProcess(ProcessBase):
 class DailyCloseDiffPreProcess(ProcessBase):
     kinds = "DCDiff"
 
-    def __init__(
-        self, ohlc_columns=["open", "high", "low", "close"], last_datetime: time = None
-    ):
+    def __init__(self, ohlc_columns=["open", "high", "low", "close"], last_datetime: time = None):
         """Caliculate Diff based on last Close value of one day before
 
 
@@ -428,9 +434,7 @@ class MinMaxPreProcess(ProcessBase):
             if len(scale) == 2 and scale[0] < scale[1]:
                 self.scale = scale
             else:
-                raise ValueError(
-                    "scale should have 2 elements with scale[0] < scale[1]"
-                )
+                raise ValueError("scale should have 2 elements with scale[0] < scale[1]")
         else:
             self.scale = (-1, 1)
 
@@ -473,9 +477,7 @@ class MinMaxPreProcess(ProcessBase):
         self.run(data)
         self.initialization_required = False
 
-    def run(
-        self, data: pd.DataFrame, symbols: list = None, grouped_by_symbol=False
-    ) -> dict:
+    def run(self, data: pd.DataFrame, symbols: list = None, grouped_by_symbol=False) -> dict:
         target_columns = _get_columns(data, self.columns, symbols, grouped_by_symbol)
         columns = list(set(data.columns) & set(target_columns))
 
@@ -507,9 +509,7 @@ class MinMaxPreProcess(ProcessBase):
                     _max = new_value
                     self.max_values[column] = _max
 
-            scaled_new_value, _min, _max = standalization.mini_max(
-                new_value, _min, _max, self.scale
-            )
+            scaled_new_value, _min, _max = standalization.mini_max(new_value, _min, _max, self.scale)
             result[column] = scaled_new_value
 
         new_data = pd.Series(result)

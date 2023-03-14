@@ -53,14 +53,40 @@ class TestPreProcess(unittest.TestCase):
         for i in range(0, len(self.org_data)):
             process_value = r_data[sample_column].iloc[i]
             exp_value = self.org_data[sample_column].iloc[i]
-            self.assertTrue(
-                process_value == exp_value, f"{process_value} != {exp_value} on {i}"
-            )
+            self.assertTrue(process_value == exp_value, f"{process_value} != {exp_value} on {i}")
 
     def test_id_process(self):
-        idprocess = preprocess.IDPreProcess(columns=["open", "close"])
+        MIN_VALUE_DIGITS = 2
+        MAX_VALUE_DIGITS = 3
+        DECIMAL_DIGITS = 3
+        idprocess = preprocess.IDPreProcess(columns=["open", "close"], decimals=-DECIMAL_DIGITS)
         id_df = idprocess(self.org_data)
-        print(id_df)
+        self.assertEqual(len(self.org_data.columns), len(id_df.columns))
+        self.assertTrue((self.org_data.columns == id_df.columns).all())
+        self.assertEqual(len(self.org_data), len(id_df))
+        # print(id_df)
+        max_value = 10 ** (MAX_VALUE_DIGITS + DECIMAL_DIGITS)
+        self.assertLessEqual(idprocess.value_ranges["open"], max_value)
+        self.assertLessEqual(idprocess.value_ranges["close"], max_value)
+        self.assertEqual(id_df["open"].min(), 0)
+        self.assertEqual(id_df["close"].min(), 0)
+        for i in range(0, len(id_df)):
+            process_value = id_df["open"].iloc[i]
+            # should be processed expectedly
+            self.assertGreaterEqual(process_value, 0)
+            self.assertLessEqual(process_value, max_value)
+            row_value = id_df["high"].iloc[i]
+            # should be kept original value
+            row_values = str(row_value).split(".")
+            self.assertEqual(len(row_values), 2)
+            self.assertGreater(len(row_values[0]), MIN_VALUE_DIGITS)
+            self.assertGreaterEqual(len(row_values[1]), 1, f"{row_value} found")
+            # original data should not be changed
+            row_org_value = self.org_data["open"].iloc[i]
+            row_values = str(row_org_value).split(".")
+            self.assertEqual(len(row_values), 2)
+            self.assertGreaterEqual(len(row_values[0]), MIN_VALUE_DIGITS)
+            self.assertGreaterEqual(len(row_values[1]), 1, f"{row_org_value} found")
 
     def test_log_process(self):
         lprocess = preprocess.LogPreProcess(columns=self.ohlc_columns)
