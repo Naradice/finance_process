@@ -353,23 +353,6 @@ class IDPreProcess(ProcessBase):
         self.initialization_required = False
 
 
-class MultiFeatureIDPreProcess(IDPreProcess):
-    kinds = "MFID"
-
-    def __init__(self, columns: list, round_digits=None, decimal_digits=None):
-        """Convert Numeric values to ID (0 to X) based on each columns
-        Ex.) Data have MultiIndex[(USDJPY, Open), (USDJPY, Close),(USDJPY, Volume) (USDCHF, Open), (USDCHF, Close), (USDCHF, Volume)] as columns
-        If [Open, Close] is specified, a minimum value is caliulated based on [Open, Close] values for each symbol. Then convert the values to IDs.
-        Thus, Open ID and Close ID has same value for the symbol
-
-        Args:
-            columns (list): _description_
-            round_digits(int, optional): Reduce digits by rounding the value. Ex.) round_digits=2 for 10324 become 103:
-            decimal_digits(int, optional): Recud decimal digits by rounding the value. Ex.) decimal_digits=3 for 3.14159265 become 3142:
-        """
-        super().__init__("mfid")
-
-
 class SimpleColumnDiffPreProcess(ProcessBase):
     kinds = "SCDiff"
 
