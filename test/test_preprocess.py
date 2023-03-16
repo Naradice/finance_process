@@ -121,7 +121,31 @@ class TestPreProcess(unittest.TestCase):
             self.assertAlmostEqual(process_value, exp_value, msg=f"{process_value} != {exp_value} on {i}")
 
     def test_minmax_process(self):
-        pass
+        mmprocess = preprocess.MinMaxPreProcess(["open", "close"])
+        mm_data = mmprocess(self.org_data)
+        self.assertEqual(len(self.org_data.columns), len(mm_data.columns))
+
+        sample_column = mm_data.columns[0]
+        for i in range(0, len(mm_data)):
+            process_value = mm_data[sample_column].iloc[i]
+            self.assertGreaterEqual(process_value, -1, f"{process_value} < -1 on {i}")
+            self.assertLessEqual(process_value, 1, f"{process_value} < -1 on {i}")
+
+    def test_revert_minmax(self):
+        mmprocess = preprocess.MinMaxPreProcess(["open", "close"])
+        mm_data = mmprocess(self.org_data)
+        r_data = mmprocess.revert(mm_data)
+
+        self.assertEqual(len(r_data.columns), len(mm_data.columns))
+        self.assertTrue((r_data.columns == mm_data.columns).all())
+
+        sample_column = self.ohlc_columns[0]
+        for i in range(0, len(self.org_data)):
+            process_value = r_data[sample_column].iloc[i]
+            exp_value = self.org_data[sample_column].iloc[i]
+            if np.isnan(process_value) and np.isnan(exp_value):
+                continue
+            self.assertAlmostEqual(process_value, exp_value, msg=f"{process_value} != {exp_value} on {i}")
 
     def test_save_processes(self):
         file_name = "./preprocess.json"

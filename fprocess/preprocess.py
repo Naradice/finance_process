@@ -478,20 +478,23 @@ class MinMaxPreProcess(ProcessBase):
         self.initialization_required = False
 
     def run(self, data: pd.DataFrame, symbols: list = None, grouped_by_symbol=False) -> dict:
-        target_columns = _get_columns(data, self.columns, symbols, grouped_by_symbol)
-        columns = list(set(data.columns) & set(target_columns))
+        target_columns, remaining_columns = _get_columns(data, self.columns, symbols, grouped_by_symbol)
 
         if len(self.min_values) > 0:
             _min = pd.Series(self.min_values)
             _max = pd.Series(self.max_values)
         else:
-            _min = data[columns].min()
+            _min = data[target_columns].min()
             self.min_values.update(_min.to_dict())
-            _max = data[columns].max()
+            _max = data[target_columns].max()
             self.max_values.update(_max.to_dict())
 
-        _df, _, _ = standalization.mini_max(data[columns], _min, _max, self.scale)
-
+        _df, _, _ = standalization.mini_max(data[target_columns], _min, _max, self.scale)
+        if len(remaining_columns) > 0:
+            org_columns = data.columns
+            remaining_df = data[remaining_columns]
+            _df = pd.concat([_df, remaining_df], axis=1)
+            _df = _df[org_columns]
         return _df
 
     def update(self, tick: pd.Series, do_update_minmax=True):
@@ -529,10 +532,17 @@ class MinMaxPreProcess(ProcessBase):
         """
 
         if isinstance(data, pd.DataFrame):
-            data = data[self.columns]
+            target_columns, remaining_columns = _get_columns(data, self.columns, None, None)
+            target_data = data[target_columns]
             _min = pd.Series(self.min_values)
             _max = pd.Series(self.max_values)
-            return standalization.revert_mini_max(data, _min, _max, self.scale)
+            r_df = standalization.revert_mini_max(target_data, _min, _max, self.scale)
+            if len(remaining_columns) > 0:
+                org_columns = data.columns
+                remaining_df = data[remaining_columns]
+                r_df = pd.concat([r_df, remaining_df], axis=1)
+                r_df = r_df[org_columns]
+            return r_df
         elif isinstance(data, pd.Series):
             column = data.name
             if column in self.columns:
