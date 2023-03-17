@@ -373,6 +373,11 @@ class IDPreProcess(ProcessBase):
                             else:
                                 temp_dfs.append(r_df[column])
                     r_df = pd.concat(temp_dfs, axis=1)
+            if len(remaining_columns) > 0:
+                org_columns = data.columns
+                remaining_df = data[remaining_columns]
+                r_df = pd.concat([r_df, remaining_df], axis=1)
+                r_df = r_df[org_columns]
             return r_df
         else:
             raise TypeError(f"type {type(data)} is not supported.")

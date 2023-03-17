@@ -88,6 +88,15 @@ class TestPreProcess(unittest.TestCase):
             self.assertGreaterEqual(len(row_values[0]), MIN_VALUE_DIGITS)
             self.assertGreaterEqual(len(row_values[1]), 1, f"{row_org_value} found")
 
+        r_data = idprocess.revert(id_df)
+        sample_column = self.ohlc_columns[0]
+        for i in range(0, len(self.org_data)):
+            process_value = r_data[sample_column].iloc[i]
+            exp_value = self.org_data[sample_column].iloc[i]
+            if np.isnan(process_value) and np.isnan(exp_value):
+                continue
+            self.assertLess(abs(process_value - exp_value), 10**-DECIMAL_DIGITS, msg=f"{process_value} != {exp_value} on {i}")
+
     def test_column_diff_process(self):
         cdprocess = preprocess.SimpleColumnDiffPreProcess("close", ["open", "high", "low", "close"])
         cd_data = cdprocess(self.org_data)
