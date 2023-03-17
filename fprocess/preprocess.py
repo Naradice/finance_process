@@ -287,11 +287,11 @@ class IDPreProcess(ProcessBase):
                 for index in range(len(self.decimals)):
                     decimal = self.decimals[index]
                     column = self.columns[index]
-                    if decimal is not None and self.decimals != 0:
-                        temp_df = temp_data[column].round(decimal) * 10**-self.decimals
-                        if self.decimals >= 0:
-                            temp_df = temp_df.round(self.decimals)
-                        temp_df = temp_df * 10**-self.decimals
+                    if decimal is not None and decimal != 0:
+                        temp_df = temp_data[column]
+                        if decimal >= 0:
+                            temp_df = temp_df.round(decimal)
+                        temp_df = temp_df * 10**-decimal
 
                         temp_dfs.append(temp_df)
                     else:
@@ -320,11 +320,11 @@ class IDPreProcess(ProcessBase):
                 for index in range(len(self.decimals)):
                     decimal = self.decimals[index]
                     column = self.columns[index]
-                    if decimal is not None and self.decimals != 0:
-                        temp_df = df[column].round(decimal) * 10**-self.decimals
-                        if self.decimals >= 0:
-                            temp_df = temp_df.round(self.decimals)
-                        temp_df = temp_df * 10**-self.decimals
+                    if decimal is not None and decimal != 0:
+                        temp_df = df[column]
+                        if decimal >= 0:
+                            temp_df = temp_df.round(decimal)
+                        temp_df = temp_df * 10**-decimal
 
                         temp_dfs.append(temp_df)
                     else:
@@ -352,8 +352,30 @@ class IDPreProcess(ProcessBase):
             self.int_type = "int64"
         self.initialization_required = False
 
-    def revert(self):
-        pass
+    def revert(self, data):
+        if isinstance(data, pd.DataFrame):
+            target_columns, remaining_columns = _get_columns(data, self.columns)
+            r_df = data[target_columns] - self.base_values[target_columns]
+
+            if self.decimals is not None and self.decimals != 0:
+                if type(self.decimals) is int:
+                    r_df = r_df * 10**self.decimals
+                else:
+                    temp_dfs = []
+                    for index in range(len(self.decimals)):
+                        decimal = self.decimals[index]
+                        column = self.columns[index]
+                        if column in target_columns:
+                            if decimal is not None and decimal != 0:
+                                temp_df = r_df[column] * 10**decimal
+
+                                temp_dfs.append(temp_df)
+                            else:
+                                temp_dfs.append(r_df[column])
+                    r_df = pd.concat(temp_dfs, axis=1)
+            return r_df
+        else:
+            raise TypeError(f"type {type(data)} is not supported.")
 
 
 class SimpleColumnDiffPreProcess(ProcessBase):
