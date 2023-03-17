@@ -352,6 +352,9 @@ class IDPreProcess(ProcessBase):
             self.int_type = "int64"
         self.initialization_required = False
 
+    def revert(self):
+        pass
+
 
 class SimpleColumnDiffPreProcess(ProcessBase):
     kinds = "SCDiff"
@@ -361,14 +364,70 @@ class SimpleColumnDiffPreProcess(ProcessBase):
         base_column: str = "close",
         target_columns: list = ["open", "high", "low", "close"],
     ):
-        """Simply caliculate diff: df[target_columns].iloc[1:] - df[base_column].iloc[:-1].values
-        Assume base_column is close and target_columns is [open, high, low, close]
+        """Caliculate diff: df[target_columns] - df[base_column].shift(1).values
+        Assume base_column is close and target_columns is [open, high, low, close]. Typically
 
         Args:
             base_column (str, optional): Defaults to "close"
             target_columns (list, optional): Defaults to ["open", "high", "low", "close"].
         """
         super().__init__("scdiff")
+        self.columns = target_columns
+        self.base_column = [base_column]
+
+    def run(self, df: pd.DataFrame):
+        target_columns, remaining_columns = _get_columns(df, self.columns)
+        self.first_value = df[self.base_column].iloc[0].values
+        target_df = df[target_columns]
+        target_df = target_df - df[self.base_column].shift(1).values
+        if len(remaining_columns) > 0:
+            org_columns = df.columns
+            remaining_df = df[remaining_columns]
+            target_df = pd.concat([target_df, remaining_df], axis=1)
+            target_df = target_df[org_columns]
+        return target_df
+
+    def revert(self, data, base_value=None):
+        if isinstance(data, pd.DataFrame):
+            remaining_columns = None
+            df = data
+            if len(data.columns) > len(self.columns):
+                target_columns, remaining_columns = _get_columns(data, self.columns)
+                df = data[target_columns]
+            else:
+                target_columns = data.columns
+            if base_value is None:
+                base_value = self.first_value
+            else:
+                if isinstance(base_value, Iterable):
+                    if len(base_value) > 1:
+                        if isinstance(base_value, pd.Series):
+                            base_value = base_value[self.base_column]
+                        else:
+                            base_value = base_value[0]
+                # else cases assume base_value can broadcast
+
+            r_data = np.zeros_like(df)
+            if pd.isna(df.iloc[0]).any():
+                r_data[0] = df.iloc[0].values
+            else:
+                next_df = df.iloc[0] + base_value
+                r_data[0] = next_df.values
+                base_value = next_df[self.base_column].values
+
+            for i in range(1, len(df)):
+                next_df = df.iloc[i] + base_value
+                r_data[i] = next_df.values
+                base_value = next_df[self.base_column].values
+            r_data = pd.DataFrame(r_data, index=data.index, columns=target_columns)
+            if remaining_columns:
+                org_columns = data.columns
+                remaining_df = data[remaining_columns]
+                r_data = pd.concat([r_data, remaining_df], axis=1)
+                r_data = r_data[org_columns]
+            return r_data
+        else:
+            raise TypeError(f"type {type(data)} is not supported.")
 
 
 class DailyCloseDiffPreProcess(ProcessBase):

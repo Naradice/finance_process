@@ -88,6 +88,17 @@ class TestPreProcess(unittest.TestCase):
             self.assertGreaterEqual(len(row_values[0]), MIN_VALUE_DIGITS)
             self.assertGreaterEqual(len(row_values[1]), 1, f"{row_org_value} found")
 
+    def test_column_diff_process(self):
+        cdprocess = preprocess.SimpleColumnDiffPreProcess("close", ["open", "high", "low", "close"])
+        cd_data = cdprocess(self.org_data)
+        self.assertEqual(len(self.org_data.columns), len(cd_data.columns))
+        self.assertTrue((self.org_data.columns == cd_data.columns).all())
+        r_data = cdprocess.revert(cd_data)
+        for i in range(1, len(self.org_data)):
+            process_value = r_data["open"].iloc[i]
+            exp_value = self.org_data["open"].iloc[i]
+            self.assertTrue(process_value == exp_value, f"{process_value} != {exp_value} on {i}")
+
     def test_log_process(self):
         lprocess = preprocess.LogPreProcess(columns=self.ohlc_columns)
         log_data = lprocess(self.org_data)
