@@ -167,6 +167,16 @@ class TestPreProcess(unittest.TestCase):
                 continue
             self.assertAlmostEqual(process_value, exp_value, msg=f"{process_value} != {exp_value} on {i}")
 
+    def test_std_preprocess(self):
+        stdprocess = preprocess.STDPreProcess(["open", "close"])
+        std_data = stdprocess(self.org_data)
+        self.assertEqual(len(self.org_data.columns), len(std_data.columns))
+        sample_column = std_data.columns[0]
+        for i in range(0, len(std_data)):
+            process_value = std_data[sample_column].iloc[i]
+            self.assertGreaterEqual(process_value, -10, f"{process_value} < -1 on {i}")
+            self.assertLessEqual(process_value, 10, f"{process_value} < -1 on {i}")
+
     def test_save_processes(self):
         file_name = "./preprocess.json"
         dprorcess = preprocess.DiffPreProcess(periods=1, columns=self.ohlc_columns)
