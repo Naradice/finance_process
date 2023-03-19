@@ -10,6 +10,7 @@ import pandas as pd
 
 from . import convert, standalization
 from .process import ProcessBase
+from .validation import get_start_end_time, get_most_frequent_delta
 
 
 def get_available_processes() -> dict:
@@ -73,18 +74,14 @@ def _get_columns(df, columns, symbols=None, grouped_by_symbol=True):
         if symbols is not None:
             target_symbols = list(set(target_symbols) & set(symbols))
         for i_columns in columns:
-            if type(i_columns) is str:
-                if grouped_by_symbol:
-                    target_columns += [(__symbol, i_columns) for __symbol in target_symbols]
-                else:
-                    target_columns += [(i_columns, __symbol) for __symbol in target_symbols]
-            elif isinstance(i_columns, Iterable) and len(i_columns) == 2:
-                target_columns.append(i_columns)
+            if grouped_by_symbol:
+                target_columns += [(__symbol, i_columns) for __symbol in target_symbols]
             else:
-                print(f"skip {i_columns} on ignore column process of minmax")
+                target_columns += [(i_columns, __symbol) for __symbol in target_symbols]
     else:
         target_columns = columns
-        remaining_column = list(set(df.columns) - set(target_columns))
+
+    remaining_column = list(set(df.columns) - set(target_columns))
     return target_columns, remaining_column
 
 
@@ -308,7 +305,6 @@ class IDPreProcess(ProcessBase):
         # as run function would be called with partial data, caliculate min_values in advance for entire data.
         if self.columns is None:
             self.columns = df.columns
-        params = {}
         df = df[self.columns]
         if self.decimals is not None and self.decimals != 0:
             if type(self.decimals) is int:
@@ -455,25 +451,6 @@ class SimpleColumnDiffPreProcess(ProcessBase):
             return r_data
         else:
             raise TypeError(f"type {type(data)} is not supported.")
-
-
-class DailyCloseDiffPreProcess(ProcessBase):
-    kinds = "DCDiff"
-
-    def __init__(self, ohlc_columns=["open", "high", "low", "close"], last_datetime: time = None):
-        """Caliculate Diff based on last Close value of one day before
-
-
-        Args:
-            ohlc_columns (list, optional): _description_. Defaults to ["open", "high", "low", "close"].
-        """
-        super().__init__("dcdiff")
-
-    def run(self, df):
-        pass
-
-    def revert(self, data):
-        pass
 
 
 class MinMaxPreProcess(ProcessBase):
@@ -635,21 +612,49 @@ class MinMaxPreProcess(ProcessBase):
 class STDPreProcess(ProcessBase):
     kinds = "STD"
 
-    def __init__(self):
+    def __init__(self, columns):
         super().__init__("std")
+        if type(columns) is str:
+            columns = [columns]
+        else:
+            columns = list(columns)
+        self.columns = columns
 
     def run(self, df):
-        return df
+        target_columns, remaining_columns = _get_columns(df, self.columns)
+        self.mean_values = df[target_columns].mean()
+        self.std_values = df[target_columns].std()
+        target_df = df[target_columns] - self.mean_values
+        target_df = target_df / self.std_values
+        if len(remaining_columns) > 0:
+            org_columns = df.columns
+            remaining_df = df[remaining_columns]
+            target_df = pd.concat([target_df, remaining_df], axis=1)
+            target_df = target_df[org_columns]
+        return target_df
 
     def revert(self, data):
-        return data
+        if isinstance(data, pd.DataFrame):
+            target_columns, remaining_columns = _get_columns(data, self.columns)
+            r_df = data[target_columns]
+            r_df = r_df * self.std_values
+            r_df = r_df + self.mean_values
+            if len(remaining_columns) > 0:
+                org_columns = data.columns
+                remaining_df = data[remaining_columns]
+                r_df = pd.concat([r_df, remaining_df], axis=1)
+                r_df = r_df[org_columns]
+            return r_df
+        else:
+            print(f"type{data} is not supported")
 
 
-class PCTChange(ProcessBase):
+class PCTChangePreProcess(ProcessBase):
     kinds = "PCTC"
 
-    def __init__(self):
+    def __init__(self, columns):
         super().__init__("pctc")
+        self.columns = columns
 
     def run(self, df):
         return df
