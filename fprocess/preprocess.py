@@ -647,17 +647,3 @@ class STDPreProcess(ProcessBase):
             return r_df
         else:
             print(f"type{data} is not supported")
-
-
-class PCTChangePreProcess(ProcessBase):
-    kinds = "PCTC"
-
-    def __init__(self, columns):
-        super().__init__("pctc")
-        self.columns = columns
-
-    def run(self, df):
-        return df
-
-    def revert(self, data):
-        return data
