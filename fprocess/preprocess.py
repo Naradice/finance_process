@@ -149,8 +149,14 @@ class DiffPreProcess(ProcessBase):
     def get_minimum_required_length(self):
         return self.periods + 1
 
+    @property
+    def revert_params(self):
+        return ("data", "base_value")
+
     def revert(self, data, base_values=None):
         columns = self.first_ticks.columns
+        if self.periods > 1:
+            warnings.warn("index should start with multiple of periods. This revert process can't care the index.")
 
         if isinstance(data, pd.DataFrame):
             available_columns = []
@@ -171,7 +177,7 @@ class DiffPreProcess(ProcessBase):
         elif isinstance(data, np.ndarray):
             if len(data.shape) > 2:
                 if base_values is None:
-                    raise ValueError("base_value must be specified. Default is to revert entire data.")
+                    raise ValueError("base_value must be specified.")
                 axis = 0
             else:
                 axis = 0
@@ -180,10 +186,9 @@ class DiffPreProcess(ProcessBase):
                     if len(data.shape) == 2 and data.shape[1] != len(columns):
                         feature_size = data.shape[1]
                         if feature_size > len(columns):
-                            raise ValueError(f"can't determin column axis in the positions")
+                            raise ValueError("can't determin column axis in the positions")
                         columns = columns[feature_size]
                         warnings.warn(f"assume axis=1:{data.shape[1]} is a part of columns")
-
             r_data = np.zeros_like(data)
             for start_index in range(self.periods):
                 temp_values = np.cumsum(data[start_index :: self.periods], axis=axis)
@@ -233,6 +238,10 @@ class LogPreProcess(ProcessBase):
         data = self.__log(df, target_columns)
         data = _concat_target_and_remain(df, data, remaining_columns)
         return data
+
+    @property
+    def revert_params(self):
+        return ("data",)
 
     def revert(self, data):
         if isinstance(data, pd.DataFrame):
@@ -357,6 +366,10 @@ class IDPreProcess(ProcessBase):
             self.int_type = "int64"
         self.initialization_required = False
 
+    @property
+    def revert_params(self):
+        return ("data",)
+
     def revert(self, data):
         if isinstance(data, pd.DataFrame):
             target_columns, remaining_columns = _get_columns(data, self.columns)
@@ -426,6 +439,10 @@ class SimpleColumnDiffPreProcess(ProcessBase):
             target_df = pd.concat([target_df, remaining_df], axis=1)
             target_df = target_df[org_columns]
         return target_df
+
+    @property
+    def revert_params(self):
+        return ("data", "base_value")
 
     def revert(self, data, base_value=None):
         if isinstance(data, pd.DataFrame):
@@ -521,16 +538,16 @@ class MinMaxPreProcess(ProcessBase):
         self.initialization_required = True
         if min_values is not None:
             if max_values is not None:
-                self.min_values = pd.Series(min_values)
-                self.max_values = pd.Series(max_values)
+                self.min_values = pd.Series(min_values, dtype=np.float64)
+                self.max_values = pd.Series(max_values, dtype=np.float64)
                 self.initialization_required = False
             else:
                 raise ValueError("Both min and max values required for init.")
         elif max_values is not None:
             raise ValueError("Both min and max values required for init.")
         else:
-            self.min_values = pd.Series()
-            self.max_values = pd.Series()
+            self.min_values = pd.Series([])
+            self.max_values = pd.Series([])
 
     @classmethod
     def load(self, key: str, params: dict):
@@ -588,6 +605,10 @@ class MinMaxPreProcess(ProcessBase):
     def get_minimum_required_length(self):
         return 1
 
+    @property
+    def revert_params(self):
+        return ("data", "columns")
+
     def revert(self, data, columns=None):
         """revert data minimaxed by this process
 
@@ -637,7 +658,7 @@ class MinMaxPreProcess(ProcessBase):
                 max_values = self.max_values[columns].values
             return standalization.revert_mini_max_from_value(data, min_values, max_values, self.scale)
         else:
-            print(f"type{type(data)} is not supported")
+            raise Exception(f"type{type(data)} is not supported")
 
 
 class STDPreProcess(ProcessBase):
@@ -667,6 +688,10 @@ class STDPreProcess(ProcessBase):
             target_df = pd.concat([target_df, remaining_df], axis=1)
             target_df = target_df[org_columns]
         return target_df
+
+    @property
+    def revert_params(self):
+        return ("data",)
 
     def revert(self, data):
         if isinstance(data, pd.DataFrame):

@@ -189,6 +189,55 @@ class TestPreProcess(unittest.TestCase):
                 continue
             self.assertAlmostEqual(process_value, exp_value, msg=f"{process_value} != {exp_value} on {i}")
 
+    def test_revert_minmax_with_np_chunk(self):
+        columns = ["open", "close"]
+        mmprocess = preprocess.MinMaxPreProcess(columns)
+        mm_data = mmprocess(self.org_data)
+        indices = [1, 5, 10]
+        chunk_data = []
+        data_length = 60
+
+        # for batch_first=True
+        for index in indices:
+            chunk_data.append(mm_data[columns].iloc[index : index + data_length].values)
+        chunk_data = np.array(chunk_data)
+        r_data = mmprocess.revert(chunk_data)
+
+        column_index = 0
+        for column in columns:
+            chunk_index = 0
+            for index in indices:
+                for length in range(data_length):
+                    process_value = r_data[chunk_index, length, column_index]
+                    exp_value = self.org_data[column].iloc[index + length]
+                    if np.isnan(process_value) and np.isnan(exp_value):
+                        continue
+                    self.assertAlmostEqual(process_value, exp_value, msg=f"{process_value} != {exp_value} on {index} + {length} on {column}")
+                chunk_index += 1
+            column_index += 1
+
+        # for batch_first=False
+        chunk_data = []
+        for index in indices:
+            chunk_data.append(mm_data[columns].iloc[index : index + data_length].values)
+        chunk_data = np.array(chunk_data)
+        chunk_data = chunk_data.swapaxes(0, 1)
+        print(chunk_data.shape)
+        r_data = mmprocess.revert(chunk_data)
+
+        column_index = 0
+        for column in columns:
+            chunk_index = 0
+            for index in indices:
+                for length in range(data_length):
+                    process_value = r_data[length, chunk_index, column_index]
+                    exp_value = self.org_data[column].iloc[index + length]
+                    if np.isnan(process_value) and np.isnan(exp_value):
+                        continue
+                    self.assertAlmostEqual(process_value, exp_value, msg=f"{process_value} != {exp_value} on {index} + {length} on {column}")
+                chunk_index += 1
+            column_index += 1
+
     def test_std_preprocess(self):
         stdprocess = preprocess.STDPreProcess(["open", "close"])
         std_data = stdprocess(self.org_data)
