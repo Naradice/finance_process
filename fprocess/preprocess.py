@@ -204,6 +204,10 @@ class LogPreProcess(ProcessBase):
     def __exp(self, values):
         return np.exp(values)
 
+    @property
+    def option(self):
+        return {"columns": self.columns, "e": self.base_e}
+
     def __init__(self, columns: list = None, e=None):
         """Apply np.log for specified columns
 
@@ -222,6 +226,7 @@ class LogPreProcess(ProcessBase):
             else:
                 self.__log = lambda df, columns: df[columns].apply(np.log) / np.log(e)
                 self.__exp = lambda values: e**values
+        self.base_e = e
 
     def run(self, df: pd.DataFrame):
         target_columns, remaining_columns = _get_columns(df, self.columns)
@@ -244,6 +249,10 @@ class LogPreProcess(ProcessBase):
 
 class IDPreProcess(ProcessBase):
     kinds = "ID"
+
+    @property
+    def option(self):
+        return {"columns": self.columns, "decimals": self.decimals}
 
     def __init__(self, columns: list = None, decimals=None):
         """Convert Numeric values to ID (0 to X)
@@ -382,6 +391,10 @@ class IDPreProcess(ProcessBase):
 class SimpleColumnDiffPreProcess(ProcessBase):
     kinds = "SCDiff"
 
+    @property
+    def option(self):
+        return {"base_column": self.base_column, "target_columns": self.columns}
+
     def __init__(
         self,
         base_column: str = "close",
@@ -459,6 +472,15 @@ class SimpleColumnDiffPreProcess(ProcessBase):
 
 class MinMaxPreProcess(ProcessBase):
     kinds = "MiniMax"
+
+    @property
+    def option(self):
+        return {
+            "columns": self.columns,
+            "scale": self.scale,
+            "min_values": self.min_values.to_dict(),
+            "max_values": self.max_values.to_dict(),
+        }
 
     def __init__(
         self,
@@ -620,6 +642,10 @@ class MinMaxPreProcess(ProcessBase):
 
 class STDPreProcess(ProcessBase):
     kinds = "STD"
+
+    @property
+    def option(self):
+        return {"columns": self.columns}
 
     def __init__(self, columns=None):
         super().__init__("std")
