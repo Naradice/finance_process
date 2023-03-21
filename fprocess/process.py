@@ -13,9 +13,7 @@ class ProcessBase(metaclass=ABCMeta):
         raise Exception("Need to implement")
 
     def initialize(self, symbols: list, data: pd.DataFrame, grouped_by_symbol=False):
-        print(
-            "initialization of base class is called. please create initialize function on your process."
-        )
+        print("initialization of base class is called. please create initialize function on your process.")
         pass
 
     def __call__(self, *args, **kwds):
@@ -45,7 +43,7 @@ class ProcessBase(metaclass=ABCMeta):
         raise Exception("Need to implement")
 
     def get_minimum_required_length(self) -> int:
-        return 0
+        return 1
 
     def revert(self, data_set: tuple):
         """revert processed data to row data with option value

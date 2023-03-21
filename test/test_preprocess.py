@@ -167,6 +167,28 @@ class TestPreProcess(unittest.TestCase):
                 continue
             self.assertAlmostEqual(process_value, exp_value, msg=f"{process_value} != {exp_value} on {i}")
 
+    def test_revert_minmax_with_numpy(self):
+        columns = ["open", "close"]
+        mmprocess = preprocess.MinMaxPreProcess(columns)
+        mm_data = mmprocess(self.org_data)
+        r_data = mmprocess.revert(mm_data[columns].values)
+        sample_column = columns[0]
+        for i in range(0, len(self.org_data)):
+            process_value = r_data[i, 0]
+            exp_value = self.org_data[sample_column].iloc[i]
+            if np.isnan(process_value) and np.isnan(exp_value):
+                continue
+            self.assertAlmostEqual(process_value, exp_value, msg=f"{process_value} != {exp_value} on {i}")
+
+        sample_column = columns[1]
+        r_data = mmprocess.revert(mm_data[sample_column].values, sample_column)
+        for i in range(0, len(self.org_data)):
+            process_value = r_data[i]
+            exp_value = self.org_data[sample_column].iloc[i]
+            if np.isnan(process_value) and np.isnan(exp_value):
+                continue
+            self.assertAlmostEqual(process_value, exp_value, msg=f"{process_value} != {exp_value} on {i}")
+
     def test_std_preprocess(self):
         stdprocess = preprocess.STDPreProcess(["open", "close"])
         std_data = stdprocess(self.org_data)

@@ -395,6 +395,10 @@ class SimpleColumnDiffPreProcess(ProcessBase):
             target_columns (list, optional): Defaults to ["open", "high", "low", "close"].
         """
         super().__init__("scdiff")
+        if type(target_columns) is str:
+            target_columns = [target_columns]
+        elif isinstance(target_columns, Iterable):
+            target_columns = list(target_columns)
         self.columns = target_columns
         self.base_column = [base_column]
 
@@ -495,16 +499,16 @@ class MinMaxPreProcess(ProcessBase):
         self.initialization_required = True
         if min_values is not None:
             if max_values is not None:
-                self.min_values = min_values
-                self.max_values = max_values
+                self.min_values = pd.Series(min_values)
+                self.max_values = pd.Series(max_values)
                 self.initialization_required = False
             else:
                 raise ValueError("Both min and max values required for init.")
         elif max_values is not None:
             raise ValueError("Both min and max values required for init.")
         else:
-            self.min_values = {}
-            self.max_values = {}
+            self.min_values = pd.Series()
+            self.max_values = pd.Series()
 
     @classmethod
     def load(self, key: str, params: dict):
@@ -526,16 +530,11 @@ class MinMaxPreProcess(ProcessBase):
     def run(self, data: pd.DataFrame, symbols: list = None, grouped_by_symbol=False) -> dict:
         target_columns, remaining_columns = _get_columns(data, self.columns, symbols, grouped_by_symbol)
 
-        if len(self.min_values) > 0:
-            _min = pd.Series(self.min_values)
-            _max = pd.Series(self.max_values)
-        else:
-            _min = data[target_columns].min()
-            self.min_values.update(_min.to_dict())
-            _max = data[target_columns].max()
-            self.max_values.update(_max.to_dict())
+        if len(self.min_values) == 0:
+            self.min_values = data[target_columns].min()
+            self.max_values = data[target_columns].max()
 
-        _df, _, _ = standalization.mini_max(data[target_columns], _min, _max, self.scale)
+        _df, _, _ = standalization.mini_max(data[target_columns], self.min_values, self.max_values, self.scale)
         if len(remaining_columns) > 0:
             org_columns = data.columns
             remaining_df = data[remaining_columns]
@@ -567,12 +566,12 @@ class MinMaxPreProcess(ProcessBase):
     def get_minimum_required_length(self):
         return 1
 
-    def revert(self, data):
+    def revert(self, data, columns=None):
         """revert data minimaxed by this process
 
         Args:
             data (DataFrame|Series): log data
-
+            columns (list, Optional): used numpy only. specify columns to revert
         Returns:
            reverted data. type is same as input
         """
@@ -580,8 +579,8 @@ class MinMaxPreProcess(ProcessBase):
         if isinstance(data, pd.DataFrame):
             target_columns, remaining_columns = _get_columns(data, self.columns, None, None)
             target_data = data[target_columns]
-            _min = pd.Series(self.min_values)
-            _max = pd.Series(self.max_values)
+            _min = self.min_values[target_columns]
+            _max = self.max_values[target_columns]
             r_df = standalization.revert_mini_max(target_data, _min, _max, self.scale)
             if len(remaining_columns) > 0:
                 org_columns = data.columns
@@ -596,27 +595,37 @@ class MinMaxPreProcess(ProcessBase):
                 _max = self.max_values[column]
             else:
                 columns = data.index
-                _min = []
-                _max = []
+                target_columns = []
                 for column in columns:
                     if column in self.columns:
-                        _min.append(self.min_values[column])
-                        _max.append(self.max_values[column])
-                _min = pd.Series(_min, index=columns)
-                _max = pd.Series(_max, index=columns)
+                        target_columns.append(column)
+                _min = self.min_values[target_columns]
+                _max = self.max_values[target_columns]
             return standalization.revert_mini_max_from_series(data, _min, _max, self.scale)
+        elif isinstance(data, np.ndarray):
+            if columns is None:
+                if data.shape[-1] != len(self.columns):
+                    raise Exception("feature size mismatch. Please specify columns.")
+                columns = self.columns
+            if type(columns) is str:
+                min_values = self.min_values[columns]
+                max_values = self.max_values[columns]
+            else:
+                min_values = self.min_values[columns].values
+                max_values = self.max_values[columns].values
+            return standalization.revert_mini_max_from_value(data, min_values, max_values, self.scale)
         else:
-            print(f"type{data} is not supported")
+            print(f"type{type(data)} is not supported")
 
 
 class STDPreProcess(ProcessBase):
     kinds = "STD"
 
-    def __init__(self, columns):
+    def __init__(self, columns=None):
         super().__init__("std")
         if type(columns) is str:
             columns = [columns]
-        else:
+        elif isinstance(columns, Iterable):
             columns = list(columns)
         self.columns = columns
 
@@ -646,4 +655,4 @@ class STDPreProcess(ProcessBase):
                 r_df = r_df[org_columns]
             return r_df
         else:
-            print(f"type{data} is not supported")
+            print(f"type{type(data)} is not supported")
