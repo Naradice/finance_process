@@ -546,8 +546,8 @@ class MinMaxPreProcess(ProcessBase):
         elif max_values is not None:
             raise ValueError("Both min and max values required for init.")
         else:
-            self.min_values = pd.Series([])
-            self.max_values = pd.Series([])
+            self.min_values = pd.Series([], dtype=np.float64)
+            self.max_values = pd.Series([], dtype=np.float64)
 
     @classmethod
     def load(self, key: str, params: dict):
