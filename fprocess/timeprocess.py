@@ -7,8 +7,8 @@ from .process import ProcessBase
 
 
 class WeeklyIDProcess(ProcessBase):
-    def __init__(self, key: str = "wid", freq: int = 30, time_column: str = "index"):
-        super().__init__(key)
+    def __init__(self, freq: int = 30, time_column: str = "index"):
+        super().__init__("wid")
         self.freq = freq
         self.time_column = time_column
         self.min_factor = 0
@@ -28,8 +28,8 @@ class WeeklyIDProcess(ProcessBase):
 
 
 class DailyIDProcess(ProcessBase):
-    def __init__(self, key: str = "did", freq: int = 30, time_column="index"):
-        super().__init__(key)
+    def __init__(self, freq: int = 30, time_column="index"):
+        super().__init__("did")
         self.freq = freq
         self.time_column = time_column
         self.min_factor = 0
@@ -49,8 +49,8 @@ class DailyIDProcess(ProcessBase):
 
 
 class SinProcess(ProcessBase):
-    def __init__(self, key: str = "sin", freq: int = 60 * 24, time_column="index", amplifier=1):
-        super().__init__(key)
+    def __init__(self, freq: int = 60 * 24, time_column="index", amplifier=1):
+        super().__init__("sinid")
         hours = freq // 60
         self.daily_frequency = 1 / (hours * 3600)
         self.daily_phase = 0
