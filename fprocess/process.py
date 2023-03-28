@@ -54,7 +54,7 @@ class ProcessBase(metaclass=ABCMeta):
         Returns:
             Boolean, dict: return (True, data: pd.dataFrame) if reverse_process is defined, otherwise (False, None)
         """
-        return False, None
+        return data_set
 
     def __eq__(self, __o: object) -> bool:
         if "key" in dir(__o):
