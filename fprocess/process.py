@@ -4,7 +4,6 @@ import pandas as pd
 
 
 class ProcessBase(metaclass=ABCMeta):
-
     def __init__(self, key: str):
         self.key = key
         self.initialization_required = False
@@ -16,6 +15,11 @@ class ProcessBase(metaclass=ABCMeta):
     def initialize(self, symbols: list, data: pd.DataFrame, grouped_by_symbol=False):
         print("initialization of base class is called. please create initialize function on your process.")
         pass
+
+    def __call__(self, *args, **kwds):
+        if self.initialization_required:
+            self.initialize(*args, **kwds)
+        return self.run(*args, **kwds)
 
     @abstractmethod
     def run(self, symbols: list, data: pd.DataFrame, grouped_by_symbol=False) -> dict:
@@ -39,7 +43,7 @@ class ProcessBase(metaclass=ABCMeta):
         raise Exception("Need to implement")
 
     def get_minimum_required_length(self) -> int:
-        return 0
+        return 1
 
     def revert(self, data_set: tuple):
         """revert processed data to row data with option value
@@ -50,7 +54,7 @@ class ProcessBase(metaclass=ABCMeta):
         Returns:
             Boolean, dict: return (True, data: pd.dataFrame) if reverse_process is defined, otherwise (False, None)
         """
-        return False, None
+        return data_set
 
     def __eq__(self, __o: object) -> bool:
         if "key" in dir(__o):
