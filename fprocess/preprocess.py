@@ -153,7 +153,7 @@ class DiffPreProcess(ProcessBase):
     def revert_params(self):
         return ("data", "base_value")
 
-    def revert(self, data, base_values=None):
+    def revert(self, data, base_values=None, columns=None):
         columns = self.first_ticks.columns
         if self.periods > 1:
             warnings.warn("index should start with multiple of periods. This revert process can't care the index.")
@@ -243,7 +243,7 @@ class LogPreProcess(ProcessBase):
     def revert_params(self):
         return ("data",)
 
-    def revert(self, data):
+    def revert(self, data, columns=None):
         if isinstance(data, pd.DataFrame):
             target_columns, remaining_columns = _get_columns(data, self.columns)
             log_data = data[target_columns]
