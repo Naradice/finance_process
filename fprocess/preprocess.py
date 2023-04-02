@@ -154,7 +154,8 @@ class DiffPreProcess(ProcessBase):
         return ("data", "base_value")
 
     def revert(self, data, base_values=None, columns=None):
-        columns = self.first_ticks.columns
+        if columns is None:
+            columns = self.first_ticks.columns
         if self.periods > 1:
             warnings.warn("index should start with multiple of periods. This revert process can't care the index.")
 
@@ -649,7 +650,6 @@ class MinMaxPreProcess(ProcessBase):
             if columns is None:
                 if data.shape[-1] != len(self.columns):
                     raise Exception("feature size mismatch. Please specify columns.")
-                columns = self.columns
             if type(columns) is str:
                 min_values = self.min_values[columns]
                 max_values = self.max_values[columns]
