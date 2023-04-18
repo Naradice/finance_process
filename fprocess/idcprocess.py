@@ -198,7 +198,7 @@ class MACDProcess(ProcessBase):
         short_ema = data_set[0]
         short_window = self.option["short_window"]
         out = technical.revert_EMA(short_ema, short_window)
-        return True, out
+        return out
 
 
 class EMAProcess(ProcessBase):
@@ -265,7 +265,7 @@ class EMAProcess(ProcessBase):
         ema = data_set[0]
         window = self.option["window"]
         out = technical.revert_EMA(ema, window)
-        return True, out
+        return out
 
 
 class BBANDProcess(ProcessBase):
@@ -369,10 +369,6 @@ class BBANDProcess(ProcessBase):
     def get_minimum_required_length(self):
         return self.option["window"]
 
-    def revert(self, data_set: tuple):
-        # pass
-        return False, None
-
 
 class ATRProcess(ProcessBase):
     kinds = "ATR"
@@ -435,10 +431,6 @@ class ATRProcess(ProcessBase):
 
     def get_minimum_required_length(self):
         return self.option["window"]
-
-    def revert(self, data_set: tuple):
-        # pass
-        return False, None
 
 
 class RSIProcess(ProcessBase):
@@ -521,10 +513,6 @@ class RSIProcess(ProcessBase):
     def get_minimum_required_length(self):
         return self.option["window"]
 
-    def revert(self, data_set: tuple):
-        # pass
-        return False, None
-
 
 class RenkoProcess(ProcessBase):
     kinds = "Renko"
@@ -591,10 +579,6 @@ class RenkoProcess(ProcessBase):
     def get_minimum_required_length(self):
         return self.option["window"] + 30
 
-    def revert(self, data_set: tuple):
-        # pass
-        return False, None
-
 
 class SlopeProcess(ProcessBase):
     kinds = "Slope"
@@ -646,10 +630,6 @@ class SlopeProcess(ProcessBase):
 
     def get_minimum_required_length(self):
         return self.option["window"]
-
-    def revert(self, data_set: tuple):
-        # pass
-        return False, None
 
 
 class CCIProcess(ProcessBase):
@@ -718,10 +698,6 @@ class CCIProcess(ProcessBase):
 
     def get_minimum_required_length(self):
         return self.options["window"]
-
-    def revert(self, data_set: tuple):
-        # pass
-        return False, None
 
 
 class RangeTrendProcess(ProcessBase):
@@ -954,10 +930,10 @@ class RangeTrendProcess(ProcessBase):
 
 
 class LinearRegressionMomentumProcess:
-    def __init__(self, window: int = 90, column: str = "Close", trading_days: int = None) -> None:
+    def __init__(self, window: int = 90, column: str = "Close", trading_days: int = None, key="lrm") -> None:
         self.window = window
         self.column = column
-        self.KEY_MOMENTUM = "momentum"
+        self.KEY_MOMENTUM = f"{key}_momentum"
         if trading_days is None:
             self.trading_days = window
         else:
@@ -966,6 +942,10 @@ class LinearRegressionMomentumProcess:
     @property
     def columns(self):
         return [self.KEY_MOMENTUM]
+    
+    @property
+    def options(self):
+        return {"window": self.window, "column": self.column, "trading_days": self.trading_days, "key": self.KEY_MOMENTUM.split("_")[0]}
 
     def __get_momentum(self, data):
         log_data = numpy.log(data)
@@ -973,11 +953,30 @@ class LinearRegressionMomentumProcess:
         beta, intercept, rvalue, pvalue, stderr = linregress(x_data, log_data)
         return ((1 + beta) ** 252) * (rvalue**2)
 
-    def run(self, data: pd.DataFrame, inplace=True) -> pd.DataFrame:
-        momentum_df = data[self.column].rolling(self.window).apply(self.__get_momentum, raw=False)
-        momentum_df.name = self.KEY_MOMENTUM
-        if inplace:
-            data[self.KEY_MOMENTUM] = momentum_df
-        else:
-            data = pd.concat([data, momentum_df], axis=1)
-        return data
+    def run(self, df: pd.DataFrame, symbols: list = [], grouped_by_symbol=False) -> pd.DataFrame:
+        if grouped_by_symbol == False:
+            close_dfs = df[self.column]
+            if isinstance(close_dfs, pd.Series):
+                momentum_df = close_dfs.dropna().rolling(self.window).apply(self.__get_momentum, raw=False)
+                momentum_df.name = self.KEY_MOMENTUM
+            else:
+                if len(symbols) == 0:
+                    symbols = close_dfs.columns
+                MDFS = {}
+                # directry apply rolling method to multiindex dataframe works, but dropna drops data is any symbol is NaN.
+                for symbol in symbols:
+                    MDFS[(self.KEY_MOMENTUM, symbol)] = close_dfs[symbol].dropna().rolling(self.window).apply(self.__get_momentum, raw=False)
+                momentum_df = pd.concat(MDFS.values(), keys=MDFS.keys(), axis=1)
+        if grouped_by_symbol == True:
+            close_dfs = df.xs(self.column, axis=1, level=1)
+            if len(symbols) == 0:
+                symbols = close_dfs.columns
+            MDFS = {}
+            for symbol in symbols:
+                MDFS[(symbol, self.KEY_MOMENTUM)] = close_dfs[symbol].dropna().rolling(self.window).apply(self.__get_momentum, raw=False)
+            momentum_df = pd.concat(MDFS.values(), keys=MDFS.keys(), axis=1)
+
+        return pd.concat([df, momentum_df], axis=1)
+
+    def get_minimum_required_length(self):
+        return self.options["window"]
