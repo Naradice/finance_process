@@ -244,7 +244,7 @@ class LogPreProcess(ProcessBase):
     def revert_params(self):
         return ("data",)
 
-    def revert(self, data):
+    def revert(self, data, columns=None):
         if isinstance(data, pd.DataFrame):
             target_columns, remaining_columns = _get_columns(data, self.columns)
             log_data = data[target_columns]
