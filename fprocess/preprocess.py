@@ -264,7 +264,7 @@ class IDPreProcess(ProcessBase):
     def option(self):
         return {"columns": self.columns, "decimals": self.decimals}
 
-    def __init__(self, columns: list = None, decimals=None):
+    def __init__(self, columns: list = None, decimals=None, min_value=None, max_value=None, int_dtype=np.int64):
         """Convert Numeric values to ID (0 to X)
 
         Args:
@@ -287,7 +287,21 @@ class IDPreProcess(ProcessBase):
         else:
             raise TypeError(f"decimans should be int or list. {type(decimals)} is specified.")
         self.columns = columns
-        self.initialization_required = True
+        if all([min_value is None, max_value is None]):
+            self.initialization_required = True
+        else:
+            self.initialization_required = False
+
+        if min_value is not None:
+            if isinstance(min_value, pd.Series):
+                self.base_values = min_value.abs()
+            else:
+                self.base_values = abs(min_value)
+            self.value_ranges = min_value + max_value
+        else:
+            self.base_values = None
+            self.value_ranges = None
+        self.int_type = int_dtype
 
     def run(self, df: pd.DataFrame):
         org_columns = df.columns
@@ -345,26 +359,27 @@ class IDPreProcess(ProcessBase):
                     else:
                         temp_dfs.append(df[column])
                 df = pd.concat(temp_dfs, axis=1)
-        min_values = df.min()
-        bases = []
-        columns = []
-        base_value_p = min_values[min_values > 0]
-        if len(base_value_p) > 0:
-            bases.extend(-base_value_p.values)
-            columns.extend(base_value_p.index.values)
-        base_value_n = min_values[min_values <= 0]
-        if len(base_value_n) > 0:
-            bases.extend(base_value_n.abs().values)
-            columns.extend(base_value_n.index.values)
-        self.base_values = pd.Series(bases, index=columns)
-        self.value_ranges = df.max() + self.base_values
-        a_max_value = self.value_ranges.max()
-        if a_max_value < 32768:
-            self.int_type = "int16"
-        elif a_max_value < 2147483648:
-            self.int_type = "int32"
-        else:
-            self.int_type = "int64"
+        if self.base_values is None:
+            min_values = df.min()
+            bases = []
+            columns = []
+            base_value_p = min_values[min_values > 0]
+            if len(base_value_p) > 0:
+                bases.extend(-base_value_p.values)
+                columns.extend(base_value_p.index.values)
+            base_value_n = min_values[min_values <= 0]
+            if len(base_value_n) > 0:
+                bases.extend(base_value_n.abs().values)
+                columns.extend(base_value_n.index.values)
+            self.base_values = pd.Series(bases, index=columns)
+            self.value_ranges = df.max() + self.base_values
+        # a_max_value = self.value_ranges.max()
+        # if a_max_value < 32768:
+        #     int_type = "int16"
+        # if a_max_value < 2147483648:
+        #     int_type = "int32"
+        # else:
+        #     int_type = "int64"
         self.initialization_required = False
 
     @property
