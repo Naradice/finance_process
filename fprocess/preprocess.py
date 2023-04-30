@@ -69,19 +69,24 @@ def _get_columns(df, columns, symbols=None, grouped_by_symbol=True):
     target_columns = []
     if columns is None:
         columns = df.columns
-    if type(df.columns) == pd.MultiIndex:
+    if symbols is not None and type(columns) == pd.MultiIndex:
         target_symbols = convert.get_symbols(df, grouped_by_symbol)
-        if symbols is not None:
-            target_symbols = list(set(target_symbols) & set(symbols))
+        target_symbols = list(set(target_symbols) & set(symbols))
+        remaining_column = []
         for i_columns in columns:
             if grouped_by_symbol:
-                target_columns += [(__symbol, i_columns) for __symbol in target_symbols]
+                if i_columns[0] in target_symbols:
+                    target_columns += i_columns
+                else:
+                    remaining_column += i_columns
             else:
-                target_columns += [(i_columns, __symbol) for __symbol in target_symbols]
+                if i_columns[1] in target_symbols:
+                    target_columns += i_columns
+                else:
+                    remaining_column += i_columns
     else:
         target_columns = columns
-
-    remaining_column = list(set(df.columns) - set(target_columns))
+        remaining_column = list(set(columns) - set(target_columns))
     return target_columns, remaining_column
 
 
@@ -121,10 +126,10 @@ class DiffPreProcess(ProcessBase):
     def load(self, key: str, params: dict):
         return DiffPreProcess(**params, key=key)
 
-    def run(self, df: pd.DataFrame) -> dict:
+    def run(self, df: pd.DataFrame, symbols: list = None, grouped_by_symbol=False) -> dict:
         remaining_columns = None
         if self.columns is not None:
-            target_columns, remaining_columns = _get_columns(df, self.columns)
+            target_columns, remaining_columns = _get_columns(df, self.columns, symbols, grouped_by_symbol)
             temp_data = df[target_columns]
         else:
             temp_data = df
@@ -521,6 +526,7 @@ class MinMaxPreProcess(ProcessBase):
         scale=(-1, 1),
         min_values=None,
         max_values=None,
+        grouped_by_symbols=False,
         key: str = "minmax",
     ):
         """Apply minimax for each column of data.
@@ -552,6 +558,7 @@ class MinMaxPreProcess(ProcessBase):
         self.columns = columns
 
         self.initialization_required = True
+        self.grouped_by_symbols = grouped_by_symbols
         if min_values is not None:
             if max_values is not None:
                 self.min_values = pd.Series(min_values, dtype=np.float64)
@@ -576,13 +583,18 @@ class MinMaxPreProcess(ProcessBase):
         process = MinMaxPreProcess(key, **option)
         return process
 
-    def initialize(self, data: pd.DataFrame):
+    def initialize(self, data: pd.DataFrame, symbols: list = None, grouped_by_symbols=None):
+        if grouped_by_symbols is None:
+            grouped_by_symbols = self.grouped_by_symbols
+
         if self.columns is None:
             self.columns = data.columns
-        self.run(data)
+        self.run(data, symbols, grouped_by_symbols)
         self.initialization_required = False
 
-    def run(self, data: pd.DataFrame, symbols: list = None, grouped_by_symbol=False) -> dict:
+    def run(self, data: pd.DataFrame, symbols: list = None, grouped_by_symbol=None) -> dict:
+        if grouped_by_symbol is None:
+            grouped_by_symbol = self.grouped_by_symbols
         target_columns, remaining_columns = _get_columns(data, self.columns, symbols, grouped_by_symbol)
 
         if len(self.min_values) == 0:
