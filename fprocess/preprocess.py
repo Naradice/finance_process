@@ -67,9 +67,8 @@ def load_preprocess(arg: Union[str, dict]) -> list:
 
 def _get_columns(df, columns, symbols=None, grouped_by_symbol=True):
     target_columns = []
-    if columns is None:
+    if symbols is not None and type(df.columns) == pd.MultiIndex:
         columns = df.columns
-    if symbols is not None and type(columns) == pd.MultiIndex:
         target_symbols = convert.get_symbols(df, grouped_by_symbol)
         target_symbols = list(set(target_symbols) & set(symbols))
         remaining_column = []
@@ -86,9 +85,25 @@ def _get_columns(df, columns, symbols=None, grouped_by_symbol=True):
                     remaining_column.append(i_columns)
         target_columns = pd.MultiIndex.from_tuples(target_columns)
         remaining_column = pd.MultiIndex.from_tuples(remaining_column)
+    elif columns is not None and type(df.columns) == pd.MultiIndex:
+        target_columns = []
+        remaining_column = []
+        for i_columns in df.columns:
+            if grouped_by_symbol:
+                if i_columns[1] in columns:
+                    target_columns.append(i_columns)
+                else:
+                    remaining_column.append(i_columns)
+            else:
+                if i_columns[0] in columns:
+                    target_columns.append(i_columns)
+                else:
+                    remaining_column.append(i_columns)
+        target_columns = pd.MultiIndex.from_tuples(target_columns)
+        remaining_column = pd.MultiIndex.from_tuples(remaining_column)
     else:
         target_columns = columns
-        remaining_column = list(set(columns) - set(target_columns))
+        remaining_column = []
     return target_columns, remaining_column
 
 
