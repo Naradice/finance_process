@@ -650,6 +650,7 @@ class MinMaxPreProcess(ProcessBase):
             if columns is None:
                 if data.shape[-1] != len(self.columns):
                     raise Exception("feature size mismatch. Please specify columns.")
+                columns = self.columns
             if type(columns) is str:
                 min_values = self.min_values[columns]
                 max_values = self.max_values[columns]
