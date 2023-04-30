@@ -45,7 +45,7 @@ class ProcessBase(metaclass=ABCMeta):
     def get_minimum_required_length(self) -> int:
         return 1
 
-    def revert(self, data_set: tuple):
+    def revert(self, data, columns=None):
         """revert processed data to row data with option value
 
         Args:
@@ -54,7 +54,7 @@ class ProcessBase(metaclass=ABCMeta):
         Returns:
             Boolean, dict: return (True, data: pd.dataFrame) if reverse_process is defined, otherwise (False, None)
         """
-        return data_set
+        return data
 
     def __eq__(self, __o: object) -> bool:
         if "key" in dir(__o):

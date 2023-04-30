@@ -1,5 +1,6 @@
 import numpy
 import pandas as pd
+from scipy.stats import linregress
 
 from .convert import concat, get_symbols
 from .indicaters import technical
@@ -20,6 +21,7 @@ def get_available_processes() -> dict:
         # 'Roll': RollingProcess,
         "Renko": RenkoProcess,
         "Slope": SlopeProcess,
+        "LRMomentum": LinearRegressionMomentumProcess,
     }
     return processes
 
@@ -196,7 +198,7 @@ class MACDProcess(ProcessBase):
         short_ema = data_set[0]
         short_window = self.option["short_window"]
         out = technical.revert_EMA(short_ema, short_window)
-        return True, out
+        return out
 
 
 class EMAProcess(ProcessBase):
@@ -263,7 +265,7 @@ class EMAProcess(ProcessBase):
         ema = data_set[0]
         window = self.option["window"]
         out = technical.revert_EMA(ema, window)
-        return True, out
+        return out
 
 
 class BBANDProcess(ProcessBase):
@@ -367,17 +369,11 @@ class BBANDProcess(ProcessBase):
     def get_minimum_required_length(self):
         return self.option["window"]
 
-    def revert(self, data_set: tuple):
-        # pass
-        return False, None
-
 
 class ATRProcess(ProcessBase):
     kinds = "ATR"
 
-    def __init__(
-        self, key="atr", window=14, ohlc_column_name=("Open", "High", "Low", "Close"), is_input=True, is_output=True, option=None
-    ):
+    def __init__(self, key="atr", window=14, ohlc_column_name=("Open", "High", "Low", "Close"), is_input=True, is_output=True, option=None):
         super().__init__(key)
         self.option = {"ohlc_column": ohlc_column_name, "window": window}
         if option is not None:
@@ -436,17 +432,11 @@ class ATRProcess(ProcessBase):
     def get_minimum_required_length(self):
         return self.option["window"]
 
-    def revert(self, data_set: tuple):
-        # pass
-        return False, None
-
 
 class RSIProcess(ProcessBase):
     kinds = "RSI"
 
-    def __init__(
-        self, key="rsi", window=14, ohlc_column_name=("Open", "High", "Low", "Close"), is_input=True, is_output=True, option=None
-    ):
+    def __init__(self, key="rsi", window=14, ohlc_column_name=("Open", "High", "Low", "Close"), is_input=True, is_output=True, option=None):
         super().__init__(key)
         self.option = {"ohlc_column": ohlc_column_name, "window": window}
 
@@ -523,10 +513,6 @@ class RSIProcess(ProcessBase):
     def get_minimum_required_length(self):
         return self.option["window"]
 
-    def revert(self, data_set: tuple):
-        # pass
-        return False, None
-
 
 class RenkoProcess(ProcessBase):
     kinds = "Renko"
@@ -593,10 +579,6 @@ class RenkoProcess(ProcessBase):
     def get_minimum_required_length(self):
         return self.option["window"] + 30
 
-    def revert(self, data_set: tuple):
-        # pass
-        return False, None
-
 
 class SlopeProcess(ProcessBase):
     kinds = "Slope"
@@ -648,10 +630,6 @@ class SlopeProcess(ProcessBase):
 
     def get_minimum_required_length(self):
         return self.option["window"]
-
-    def revert(self, data_set: tuple):
-        # pass
-        return False, None
 
 
 class CCIProcess(ProcessBase):
@@ -715,25 +693,17 @@ class CCIProcess(ProcessBase):
         else:
             self.data = tick
             # cci = numpy.nan
-            print(
-                f"CCI failed to update as data length is less than window size: {len(self.data) < {self.get_minimum_required_length()}}"
-            )
+            print(f"CCI failed to update as data length is less than window size: {len(self.data) < {self.get_minimum_required_length()}}")
             return self.data
 
     def get_minimum_required_length(self):
         return self.options["window"]
 
-    def revert(self, data_set: tuple):
-        # pass
-        return False, None
-
 
 class RangeTrendProcess(ProcessBase):
     kinds = "rtp"
 
-    def __init__(
-        self, key: str = "rtp", mode="bband", required_columns=[], slope_window=4, is_input=True, is_output=True, option=None
-    ):
+    def __init__(self, key: str = "rtp", mode="bband", required_columns=[], slope_window=4, is_input=True, is_output=True, option=None):
         """Experimental: Process to caliculate likelyfood of market state
         {key}_trend: from -1 to 1. 1 then bull (long position) state is strong, -1 then cow (short position) is strong
         {key}_range: from 0 to 1. possibility of market is in range trading
@@ -928,9 +898,7 @@ class RangeTrendProcess(ProcessBase):
         slope_dfs = pd.concat(slope_df_list, axis=1)
         possibility_dfs = pd.concat(possibility_df_list, axis=1)
         cls = [self.KEY_TREND, self.KEY_RANGE]
-        elements, columns = technical.create_multi_out_lists(
-            symbols, [slope_dfs, possibility_dfs], cls, grouped_by_symbol=grouped_by_symbol
-        )
+        elements, columns = technical.create_multi_out_lists(symbols, [slope_dfs, possibility_dfs], cls, grouped_by_symbol=grouped_by_symbol)
         out_df = pd.concat(elements, axis=1)
         if self.is_multi_mode:
             out_df.columns = columns
@@ -959,3 +927,56 @@ class RangeTrendProcess(ProcessBase):
     def revert(self, data_set: tuple):
         print("not supported for now")
         return False, None
+
+
+class LinearRegressionMomentumProcess:
+    def __init__(self, window: int = 90, column: str = "Close", trading_days: int = None, key="lrm") -> None:
+        self.window = window
+        self.column = column
+        self.KEY_MOMENTUM = f"{key}_momentum"
+        if trading_days is None:
+            self.trading_days = window
+        else:
+            self.trading_days = trading_days
+
+    @property
+    def columns(self):
+        return [self.KEY_MOMENTUM]
+    
+    @property
+    def options(self):
+        return {"window": self.window, "column": self.column, "trading_days": self.trading_days, "key": self.KEY_MOMENTUM.split("_")[0]}
+
+    def __get_momentum(self, data):
+        log_data = numpy.log(data)
+        x_data = numpy.arange(len(log_data))
+        beta, intercept, rvalue, pvalue, stderr = linregress(x_data, log_data)
+        return ((1 + beta) ** 252) * (rvalue**2)
+
+    def run(self, df: pd.DataFrame, symbols: list = [], grouped_by_symbol=False) -> pd.DataFrame:
+        if grouped_by_symbol == False:
+            close_dfs = df[self.column]
+            if isinstance(close_dfs, pd.Series):
+                momentum_df = close_dfs.dropna().rolling(self.window).apply(self.__get_momentum, raw=False)
+                momentum_df.name = self.KEY_MOMENTUM
+            else:
+                if len(symbols) == 0:
+                    symbols = close_dfs.columns
+                MDFS = {}
+                # directry apply rolling method to multiindex dataframe works, but dropna drops data is any symbol is NaN.
+                for symbol in symbols:
+                    MDFS[(self.KEY_MOMENTUM, symbol)] = close_dfs[symbol].dropna().rolling(self.window).apply(self.__get_momentum, raw=False)
+                momentum_df = pd.concat(MDFS.values(), keys=MDFS.keys(), axis=1)
+        if grouped_by_symbol == True:
+            close_dfs = df.xs(self.column, axis=1, level=1)
+            if len(symbols) == 0:
+                symbols = close_dfs.columns
+            MDFS = {}
+            for symbol in symbols:
+                MDFS[(symbol, self.KEY_MOMENTUM)] = close_dfs[symbol].dropna().rolling(self.window).apply(self.__get_momentum, raw=False)
+            momentum_df = pd.concat(MDFS.values(), keys=MDFS.keys(), axis=1)
+
+        return pd.concat([df, momentum_df], axis=1)
+
+    def get_minimum_required_length(self):
+        return self.options["window"]

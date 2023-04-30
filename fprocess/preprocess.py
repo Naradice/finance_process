@@ -67,21 +67,43 @@ def load_preprocess(arg: Union[str, dict]) -> list:
 
 def _get_columns(df, columns, symbols=None, grouped_by_symbol=True):
     target_columns = []
-    if columns is None:
+    if symbols is not None and type(df.columns) == pd.MultiIndex:
         columns = df.columns
-    if type(df.columns) == pd.MultiIndex:
         target_symbols = convert.get_symbols(df, grouped_by_symbol)
-        if symbols is not None:
-            target_symbols = list(set(target_symbols) & set(symbols))
+        target_symbols = list(set(target_symbols) & set(symbols))
+        remaining_column = []
         for i_columns in columns:
             if grouped_by_symbol:
-                target_columns += [(__symbol, i_columns) for __symbol in target_symbols]
+                if i_columns[0] in target_symbols:
+                    target_columns.append(i_columns)
+                else:
+                    remaining_column.append(i_columns)
             else:
-                target_columns += [(i_columns, __symbol) for __symbol in target_symbols]
+                if i_columns[1] in target_symbols:
+                    target_columns.append(i_columns)
+                else:
+                    remaining_column.append(i_columns)
+        target_columns = pd.MultiIndex.from_tuples(target_columns)
+        remaining_column = pd.MultiIndex.from_tuples(remaining_column)
+    elif columns is not None and type(df.columns) == pd.MultiIndex:
+        target_columns = []
+        remaining_column = []
+        for i_columns in df.columns:
+            if grouped_by_symbol:
+                if i_columns[1] in columns:
+                    target_columns.append(i_columns)
+                else:
+                    remaining_column.append(i_columns)
+            else:
+                if i_columns[0] in columns:
+                    target_columns.append(i_columns)
+                else:
+                    remaining_column.append(i_columns)
+        target_columns = pd.MultiIndex.from_tuples(target_columns)
+        remaining_column = pd.MultiIndex.from_tuples(remaining_column)
     else:
         target_columns = columns
-
-    remaining_column = list(set(df.columns) - set(target_columns))
+        remaining_column = list(set(df.columns) - set(columns))
     return target_columns, remaining_column
 
 
@@ -121,10 +143,10 @@ class DiffPreProcess(ProcessBase):
     def load(self, key: str, params: dict):
         return DiffPreProcess(**params, key=key)
 
-    def run(self, df: pd.DataFrame) -> dict:
+    def run(self, df: pd.DataFrame, symbols: list = None, grouped_by_symbol=False) -> dict:
         remaining_columns = None
         if self.columns is not None:
-            target_columns, remaining_columns = _get_columns(df, self.columns)
+            target_columns, remaining_columns = _get_columns(df, self.columns, symbols, grouped_by_symbol)
             temp_data = df[target_columns]
         else:
             temp_data = df
@@ -244,7 +266,7 @@ class LogPreProcess(ProcessBase):
     def revert_params(self):
         return ("data",)
 
-    def revert(self, data):
+    def revert(self, data, columns=None):
         if isinstance(data, pd.DataFrame):
             target_columns, remaining_columns = _get_columns(data, self.columns)
             log_data = data[target_columns]
@@ -264,7 +286,7 @@ class IDPreProcess(ProcessBase):
     def option(self):
         return {"columns": self.columns, "decimals": self.decimals}
 
-    def __init__(self, columns: list = None, decimals=None):
+    def __init__(self, columns: list = None, decimals=None, min_value=None, max_value=None, int_dtype=np.int64):
         """Convert Numeric values to ID (0 to X)
 
         Args:
@@ -287,7 +309,21 @@ class IDPreProcess(ProcessBase):
         else:
             raise TypeError(f"decimans should be int or list. {type(decimals)} is specified.")
         self.columns = columns
-        self.initialization_required = True
+        if all([min_value is None, max_value is None]):
+            self.initialization_required = True
+        else:
+            self.initialization_required = False
+
+        if min_value is not None:
+            if isinstance(min_value, pd.Series):
+                self.base_values = min_value.abs()
+            else:
+                self.base_values = abs(min_value)
+            self.value_ranges = min_value + max_value
+        else:
+            self.base_values = None
+            self.value_ranges = None
+        self.int_type = int_dtype
 
     def run(self, df: pd.DataFrame):
         org_columns = df.columns
@@ -345,26 +381,27 @@ class IDPreProcess(ProcessBase):
                     else:
                         temp_dfs.append(df[column])
                 df = pd.concat(temp_dfs, axis=1)
-        min_values = df.min()
-        bases = []
-        columns = []
-        base_value_p = min_values[min_values > 0]
-        if len(base_value_p) > 0:
-            bases.extend(-base_value_p.values)
-            columns.extend(base_value_p.index.values)
-        base_value_n = min_values[min_values <= 0]
-        if len(base_value_n) > 0:
-            bases.extend(base_value_n.abs().values)
-            columns.extend(base_value_n.index.values)
-        self.base_values = pd.Series(bases, index=columns)
-        self.value_ranges = df.max() + self.base_values
-        a_max_value = self.value_ranges.max()
-        if a_max_value < 32768:
-            self.int_type = "int16"
-        elif a_max_value < 2147483648:
-            self.int_type = "int32"
-        else:
-            self.int_type = "int64"
+        if self.base_values is None:
+            min_values = df.min()
+            bases = []
+            columns = []
+            base_value_p = min_values[min_values > 0]
+            if len(base_value_p) > 0:
+                bases.extend(-base_value_p.values)
+                columns.extend(base_value_p.index.values)
+            base_value_n = min_values[min_values <= 0]
+            if len(base_value_n) > 0:
+                bases.extend(base_value_n.abs().values)
+                columns.extend(base_value_n.index.values)
+            self.base_values = pd.Series(bases, index=columns)
+            self.value_ranges = df.max() + self.base_values
+        # a_max_value = self.value_ranges.max()
+        # if a_max_value < 32768:
+        #     int_type = "int16"
+        # if a_max_value < 2147483648:
+        #     int_type = "int32"
+        # else:
+        #     int_type = "int64"
         self.initialization_required = False
 
     @property
@@ -506,6 +543,7 @@ class MinMaxPreProcess(ProcessBase):
         scale=(-1, 1),
         min_values=None,
         max_values=None,
+        grouped_by_symbols=False,
         key: str = "minmax",
     ):
         """Apply minimax for each column of data.
@@ -537,6 +575,7 @@ class MinMaxPreProcess(ProcessBase):
         self.columns = columns
 
         self.initialization_required = True
+        self.grouped_by_symbols = grouped_by_symbols
         if min_values is not None:
             if max_values is not None:
                 self.min_values = pd.Series(min_values, dtype=np.float64)
@@ -561,13 +600,18 @@ class MinMaxPreProcess(ProcessBase):
         process = MinMaxPreProcess(key, **option)
         return process
 
-    def initialize(self, data: pd.DataFrame):
+    def initialize(self, data: pd.DataFrame, symbols: list = None, grouped_by_symbols=None):
+        if grouped_by_symbols is None:
+            grouped_by_symbols = self.grouped_by_symbols
+
         if self.columns is None:
             self.columns = data.columns
-        self.run(data)
+        self.run(data, symbols, grouped_by_symbols)
         self.initialization_required = False
 
-    def run(self, data: pd.DataFrame, symbols: list = None, grouped_by_symbol=False) -> dict:
+    def run(self, data: pd.DataFrame, symbols: list = None, grouped_by_symbol=None) -> dict:
+        if grouped_by_symbol is None:
+            grouped_by_symbol = self.grouped_by_symbols
         target_columns, remaining_columns = _get_columns(data, self.columns, symbols, grouped_by_symbol)
 
         if len(self.min_values) == 0:
