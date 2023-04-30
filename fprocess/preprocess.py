@@ -76,14 +76,16 @@ def _get_columns(df, columns, symbols=None, grouped_by_symbol=True):
         for i_columns in columns:
             if grouped_by_symbol:
                 if i_columns[0] in target_symbols:
-                    target_columns += i_columns
+                    target_columns.append(i_columns)
                 else:
-                    remaining_column += i_columns
+                    remaining_column.append(i_columns)
             else:
                 if i_columns[1] in target_symbols:
-                    target_columns += i_columns
+                    target_columns.append(i_columns)
                 else:
-                    remaining_column += i_columns
+                    remaining_column.append(i_columns)
+        target_columns = pd.MultiIndex.from_tuples(target_columns)
+        remaining_column = pd.MultiIndex.from_tuples(remaining_column)
     else:
         target_columns = columns
         remaining_column = list(set(columns) - set(target_columns))
