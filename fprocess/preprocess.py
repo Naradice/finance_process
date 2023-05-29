@@ -18,6 +18,9 @@ def get_available_processes() -> dict:
         "Diff": DiffPreProcess,
         "MiniMax": MinMaxPreProcess,
         "STD": STDPreProcess,
+        "SCDiff": SimpleColumnDiffPreProcess,
+        "ID": IDPreProcess,
+        "Log": LogPreProcess,
     }
     return processes
 
@@ -210,6 +213,11 @@ class LogPreProcess(ProcessBase):
     def __exp(self, values):
         return np.exp(values)
 
+    @classmethod
+    def load(self, params: dict):
+        process = LogPreProcess(**params)
+        return process
+
     @property
     def option(self):
         return {"columns": self.columns, "e": self.base_e}
@@ -264,6 +272,11 @@ class IDPreProcess(ProcessBase):
     def option(self):
         return {"columns": self.columns, "decimals": self.decimals}
 
+    @classmethod
+    def load(self, params: dict):
+        process = IDPreProcess(**params)
+        return process
+
     def __init__(self, columns: list = None, decimals=None):
         """Convert Numeric values to ID (0 to X)
 
@@ -271,8 +284,8 @@ class IDPreProcess(ProcessBase):
             columns (list): _description_
             decimals(int|list, optional):
                 When int is specified,
-                if decimals > 0, Reduce digits by rounding the value. Ex.) round_digits=2 for 10324 become 103
-                If decimals < 0, Recud decimal digits by rounding the value. Ex.) decimal_digits=3 for 3.14159265 become 3142:
+                if decimals > 0, Reduce digits by rounding the value. Ex.) decimals=2 for 10324 become 103
+                If decimals < 0, Recud decimal digits by rounding the value. Ex.) decimals=-3 for 3.14159265 become 3142:
                 When list of int is specified, it should the same length as the columns.
                 each columns are ID
         """
@@ -408,6 +421,11 @@ class SimpleColumnDiffPreProcess(ProcessBase):
     @property
     def option(self):
         return {"base_column": self.base_column, "target_columns": self.columns}
+
+    @classmethod
+    def load(self, params: dict):
+        process = SimpleColumnDiffPreProcess(**params)
+        return process
 
     def __init__(
         self,
@@ -667,6 +685,14 @@ class STDPreProcess(ProcessBase):
     @property
     def option(self):
         return {"columns": self.columns}
+
+    @classmethod
+    def load(self, params: dict):
+        option = {}
+        for k, value in params.items():
+            option[k] = value
+        process = STDPreProcess(key, **option)
+        return process
 
     def __init__(self, columns=None):
         super().__init__("std")

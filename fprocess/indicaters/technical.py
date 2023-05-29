@@ -834,19 +834,27 @@ def SlopeFromSeries(ser: pd.Series, window: int):
     Returns:
         pd.Series: slope values
     """
-    slopes = [0 for i in range(window - 1)]
+    # slopes = [0 for i in range(window - 1)]
     index = ser.index
-    for i in range(window, len(ser) + 1):
-        y = ser.iloc[i - window : i]
-        x = np.array(range(window))
-        y_scaled = (y - y.min()) / (y.max() - y.min())
-        x_scaled = (x - x.min()) / (x.max() - x.min())
-        x_scaled = sm.add_constant(x_scaled)
-        model = sm.OLS(y_scaled, x_scaled)
-        results = model.fit()
-        slopes.append(results.params[-1])
-    slope_angle = np.rad2deg(np.arctan(np.array(slopes)))
-    slope_ser = pd.Series(np.array(slope_angle))
+
+    # for i in range(window, len(ser) + 1):
+    #     y = ser.iloc[i - window : i]
+    #     x = np.array(range(window))
+    #     y_scaled = (y - y.min()) / (y.max() - y.min())
+    #     x_scaled = (x - x.min()) / (x.max() - x.min())
+    #     x_scaled = sm.add_constant(x_scaled)
+    #     model = sm.OLS(y_scaled, x_scaled)
+    #     results = model.fit()
+    #     slopes.append(results.params[-1])
+    # slope_angle = np.rad2deg(np.arctan(np.array(slopes)))
+    # slope_ser = pd.Series(np.array(slope_angle))
+    def calc_slope(x):
+        slope = np.polyfit(range(len(x)), x, 1)[0]
+        return slope
+
+    # set min_periods=2 to allow subsets less than 60.
+    # use [4::5] to select the results you need.
+    slope_ser = ser.rolling(window=window).apply(calc_slope)
     slope_ser.index = index
     return slope_ser
 
@@ -863,7 +871,7 @@ def SlopeFromOHLC(ohlc_df: pd.DataFrame, window: int, column="Close", slope_name
         pd.DataFrame: slope value on Slope column
     """
     slope_sr = SlopeFromSeries(ohlc_df[column], window)
-    return pd.DataFrame(slope_sr, columns=[slope_name])
+    return pd.DataFrame(slope_sr, columns=[slope_name], index=ohlc_df.index)
 
 
 def SlopeFromOHLCMulti(
@@ -884,10 +892,10 @@ def SlopeFromOHLCMulti(
     DFS = {}
     if grouped_by_sygnal:
         for symbol in symbols:
-            DFS[symbol] = SlopeFromOHLC(ohlc_dfs, window, (symbol, column), slope_name)
+            DFS[symbol] = SlopeFromOHLC(ohlc_dfs, window, (symbol, column), (symbol, slope_name))
     else:
         for symbol in symbols:
-            DFS[symbol] = SlopeFromOHLC(ohlc_dfs, window, (column, symbol), slope_name)
+            DFS[symbol] = SlopeFromOHLC(ohlc_dfs, window, (column, symbol), (slope_name, symbol))
     slope_dfs = pd.concat(DFS.values(), axis=1, keys=DFS.keys())
     if grouped_by_sygnal is False:
         slope_dfs.columns = slope_dfs.columns.swaplevel(0, 1)
