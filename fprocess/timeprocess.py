@@ -23,8 +23,11 @@ class WeeklyIDProcess(ProcessBase):
             time_index = data.index
         else:
             time_index = pd.DatetimeIndex(data[self.time_column])
-        time_df = (time_index.weekday * 24 + time_index.hour + time_index.minute / 60 * self.min_factor).to_frame().convert_dtypes(int)
-        time_df.columns = [self.time_column]
+        time_df = ((time_index.weekday * 24 + time_index.hour + time_index.minute / 60) * self.min_factor).to_frame().convert_dtypes(int)
+        if isinstance(data.columns, pd.MultiIndex):
+            time_df.columns = pd.MultiIndex.from_tuples([(self.time_column, self.time_column)])
+        else:
+            time_df.columns = [self.time_column]
         time_df.index = org_index
         return pd.concat([data, time_df], axis=1)
 
@@ -46,7 +49,7 @@ class DailyIDProcess(ProcessBase):
             time_index = data.index
         else:
             time_index = pd.DatetimeIndex(data[self.time_column])
-        time_df = (time_index.hour + time_index.minute / 60 * self.min_factor).to_frame().convert_dtypes(int)
+        time_df = ((time_index.hour + time_index.minute / 60) * self.min_factor).to_frame().convert_dtypes(int)
         time_df.columns = [self.time_column]
         time_df.index = org_index
         return pd.concat([data, time_df], axis=1)
