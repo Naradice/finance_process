@@ -103,7 +103,8 @@ def _get_columns(df, columns, symbols=None, grouped_by_symbol=True):
                 else:
                     remaining_column.append(i_columns)
         target_columns = pd.MultiIndex.from_tuples(target_columns)
-        remaining_column = pd.MultiIndex.from_tuples(remaining_column)
+        if len(remaining_column) > 0:
+            remaining_column = pd.MultiIndex.from_tuples(remaining_column)
     else:
         target_columns = columns
         remaining_column = list(set(df.columns) - set(columns))
