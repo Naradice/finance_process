@@ -240,7 +240,7 @@ class EMAProcess(ProcessBase):
             ema = technical.EMAMulti(symbols, data, target_column, window, grouped_by_symbol=grouped_by_symbol, ema_name=column)
         else:
             ema = technical.EMA(data[target_column], window)
-            ema.columns = [column]
+            ema.name = column
 
         self.last_data = ema.iloc[-self.get_minimum_required_length() :]
         return pd.concat([data, ema], axis=1)
@@ -373,7 +373,9 @@ class BBANDProcess(ProcessBase):
 class ATRProcess(ProcessBase):
     kinds = "ATR"
 
-    def __init__(self, key="atr", window=14, ohlc_column_name=("Open", "High", "Low", "Close"), is_input=True, is_output=True, option=None):
+    def __init__(
+        self, key="atr", window=14, ohlc_column_name=("Open", "High", "Low", "Close"), is_input=True, is_output=True, option=None
+    ):
         super().__init__(key)
         self.option = {"ohlc_column": ohlc_column_name, "window": window}
         if option is not None:
@@ -436,7 +438,9 @@ class ATRProcess(ProcessBase):
 class RSIProcess(ProcessBase):
     kinds = "RSI"
 
-    def __init__(self, key="rsi", window=14, ohlc_column_name=("Open", "High", "Low", "Close"), is_input=True, is_output=True, option=None):
+    def __init__(
+        self, key="rsi", window=14, ohlc_column_name=("Open", "High", "Low", "Close"), is_input=True, is_output=True, option=None
+    ):
         super().__init__(key)
         self.option = {"ohlc_column": ohlc_column_name, "window": window}
 
@@ -612,6 +616,7 @@ class SlopeProcess(ProcessBase):
         window = option["window"]
         out_column = self.KEY_SLOPE
 
+        org_index = data.index
         if type(data.columns) == pd.MultiIndex:
             if len(symbols) == 0:
                 symbols = get_symbols(data, grouped_by_symbol)
@@ -620,6 +625,7 @@ class SlopeProcess(ProcessBase):
             )
         else:
             slope_df = technical.SlopeFromOHLC(data, window=window, column=column, slope_name=out_column)
+        slope_df.index = org_index[-len(slope_df) :]
         # slope_df.columns = [out_column]
         # data = pd.concat([data, slope_df], axis=1)
         # return data
@@ -693,7 +699,9 @@ class CCIProcess(ProcessBase):
         else:
             self.data = tick
             # cci = numpy.nan
-            print(f"CCI failed to update as data length is less than window size: {len(self.data) < {self.get_minimum_required_length()}}")
+            print(
+                f"CCI failed to update as data length is less than window size: {len(self.data) < {self.get_minimum_required_length()}}"
+            )
             return self.data
 
     def get_minimum_required_length(self):
@@ -703,7 +711,9 @@ class CCIProcess(ProcessBase):
 class RangeTrendProcess(ProcessBase):
     kinds = "rtp"
 
-    def __init__(self, key: str = "rtp", mode="bband", required_columns=[], slope_window=4, is_input=True, is_output=True, option=None):
+    def __init__(
+        self, key: str = "rtp", mode="bband", required_columns=[], slope_window=4, is_input=True, is_output=True, option=None
+    ):
         """Experimental: Process to caliculate likelyfood of market state
         {key}_trend: from -1 to 1. 1 then bull (long position) state is strong, -1 then cow (short position) is strong
         {key}_range: from 0 to 1. possibility of market is in range trading
@@ -898,7 +908,9 @@ class RangeTrendProcess(ProcessBase):
         slope_dfs = pd.concat(slope_df_list, axis=1)
         possibility_dfs = pd.concat(possibility_df_list, axis=1)
         cls = [self.KEY_TREND, self.KEY_RANGE]
-        elements, columns = technical.create_multi_out_lists(symbols, [slope_dfs, possibility_dfs], cls, grouped_by_symbol=grouped_by_symbol)
+        elements, columns = technical.create_multi_out_lists(
+            symbols, [slope_dfs, possibility_dfs], cls, grouped_by_symbol=grouped_by_symbol
+        )
         out_df = pd.concat(elements, axis=1)
         if self.is_multi_mode:
             out_df.columns = columns
@@ -942,10 +954,15 @@ class LinearRegressionMomentumProcess:
     @property
     def columns(self):
         return [self.KEY_MOMENTUM]
-    
+
     @property
     def options(self):
-        return {"window": self.window, "column": self.column, "trading_days": self.trading_days, "key": self.KEY_MOMENTUM.split("_")[0]}
+        return {
+            "window": self.window,
+            "column": self.column,
+            "trading_days": self.trading_days,
+            "key": self.KEY_MOMENTUM.split("_")[0],
+        }
 
     def __get_momentum(self, data):
         log_data = numpy.log(data)
@@ -965,7 +982,9 @@ class LinearRegressionMomentumProcess:
                 MDFS = {}
                 # directry apply rolling method to multiindex dataframe works, but dropna drops data is any symbol is NaN.
                 for symbol in symbols:
-                    MDFS[(self.KEY_MOMENTUM, symbol)] = close_dfs[symbol].dropna().rolling(self.window).apply(self.__get_momentum, raw=False)
+                    MDFS[(self.KEY_MOMENTUM, symbol)] = (
+                        close_dfs[symbol].dropna().rolling(self.window).apply(self.__get_momentum, raw=False)
+                    )
                 momentum_df = pd.concat(MDFS.values(), keys=MDFS.keys(), axis=1)
         if grouped_by_symbol == True:
             close_dfs = df.xs(self.column, axis=1, level=1)
@@ -973,7 +992,9 @@ class LinearRegressionMomentumProcess:
                 symbols = close_dfs.columns
             MDFS = {}
             for symbol in symbols:
-                MDFS[(symbol, self.KEY_MOMENTUM)] = close_dfs[symbol].dropna().rolling(self.window).apply(self.__get_momentum, raw=False)
+                MDFS[(symbol, self.KEY_MOMENTUM)] = (
+                    close_dfs[symbol].dropna().rolling(self.window).apply(self.__get_momentum, raw=False)
+                )
             momentum_df = pd.concat(MDFS.values(), keys=MDFS.keys(), axis=1)
 
         return pd.concat([df, momentum_df], axis=1)
