@@ -871,7 +871,7 @@ def SlopeFromOHLC(ohlc_df: pd.DataFrame, window: int, column="Close", slope_name
         pd.DataFrame: slope value on Slope column
     """
     slope_sr = SlopeFromSeries(ohlc_df[column], window)
-    return pd.DataFrame(slope_sr, columns=[slope_name], index=ohlc_df.index)
+    return pd.DataFrame(slope_sr.values, columns=[slope_name], index=ohlc_df.index)
 
 
 def SlopeFromOHLCMulti(
