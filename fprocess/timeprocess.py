@@ -27,8 +27,10 @@ class WeeklyIDProcess(TimeProcess):
         org_index = data.index
         if self.time_column == "index" and isinstance(data.index, pd.DatetimeIndex):
             time_index = data.index
+            overwrite = False
         else:
             time_index = pd.DatetimeIndex(data[self.time_column])
+            overwrite = True
         time_df = (
             ((time_index.weekday * 24 + time_index.hour + time_index.minute / 60) * self.min_factor)
             .to_frame()
@@ -39,7 +41,11 @@ class WeeklyIDProcess(TimeProcess):
         else:
             time_df.columns = [self.time_column]
         time_df.index = org_index
-        return pd.concat([data, time_df], axis=1)
+        if overwrite:
+            data[self.time_column] = time_df
+            return data
+        else:
+            return pd.concat([data, time_df], axis=1)
 
 
 class DailyIDProcess(TimeProcess):

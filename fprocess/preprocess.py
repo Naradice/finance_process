@@ -616,7 +616,7 @@ class MinMaxPreProcess(ProcessBase):
                 option[k] = tuple(value)
             else:
                 option[k] = value
-        process = MinMaxPreProcess(key, **option)
+        process = MinMaxPreProcess(key=key, **option)
         return process
 
     def initialize(self, data: pd.DataFrame, symbols: list = None, grouped_by_symbols=None):
