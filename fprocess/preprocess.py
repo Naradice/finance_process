@@ -616,7 +616,7 @@ class MinMaxPreProcess(ProcessBase):
                 option[k] = tuple(value)
             else:
                 option[k] = value
-        process = MinMaxPreProcess(key=key, **option)
+        process = MinMaxPreProcess(key, **option)
         return process
 
     def initialize(self, data: pd.DataFrame, symbols: list = None, grouped_by_symbols=None):
@@ -730,30 +730,34 @@ class STDPreProcess(ProcessBase):
 
     @property
     def option(self):
-        return {"columns": self.columns}
+        return {"columns": self.columns, "alpha": self.alpha}
 
     @classmethod
     def load(self, params: dict):
         option = {}
         for k, value in params.items():
             option[k] = value
-        process = STDPreProcess(key, **option)
+        process = STDPreProcess("std", **option)
         return process
 
-    def __init__(self, columns=None):
+    def __init__(self, columns=None, alpha=1):
         super().__init__("std")
         if type(columns) is str:
             columns = [columns]
         elif isinstance(columns, Iterable):
             columns = list(columns)
         self.columns = columns
+        if type(alpha) is int or isinstance(alpha, float):
+            self.alpha = alpha
+        else:
+            raise TypeError("Please assign int or float as alpha")
 
     def run(self, df):
         target_columns, remaining_columns = _get_columns(df, self.columns)
         self.mean_values = df[target_columns].mean()
         self.std_values = df[target_columns].std()
         target_df = df[target_columns] - self.mean_values
-        target_df = target_df / self.std_values
+        target_df = target_df / (self.std_values * self.alpha)
         if len(remaining_columns) > 0:
             org_columns = df.columns
             remaining_df = df[remaining_columns]
@@ -769,7 +773,7 @@ class STDPreProcess(ProcessBase):
         if isinstance(data, pd.DataFrame):
             target_columns, remaining_columns = _get_columns(data, self.columns)
             r_df = data[target_columns]
-            r_df = r_df * self.std_values
+            r_df = r_df * self.std_values * self.alpha
             r_df = r_df + self.mean_values
             if len(remaining_columns) > 0:
                 org_columns = data.columns
@@ -777,5 +781,9 @@ class STDPreProcess(ProcessBase):
                 r_df = pd.concat([r_df, remaining_df], axis=1)
                 r_df = r_df[org_columns]
             return r_df
+        elif isinstance(data, np.ndarray):
+            r_data = data * self.std_values.values * self.alpha
+            r_data = r_data + self.mean_values.values
+            return r_data
         else:
             print(f"type{type(data)} is not supported")
