@@ -16,6 +16,10 @@ class TimeProcess(ProcessBase):
 class WeeklyIDProcess(TimeProcess):
     kinds = "wid"
 
+    @property
+    def option(self):
+        return {"freq": self.freq, "time_column": self.time_column}
+
     def __init__(self, freq: int = 30, time_column: str = "index"):
         super().__init__(key="wid", freq=freq)
         self.time_column = time_column

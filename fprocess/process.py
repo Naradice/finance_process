@@ -8,6 +8,10 @@ class ProcessBase(metaclass=ABCMeta):
         self.key = key
         self.initialization_required = False
 
+    @property
+    def option(self):
+        return {}
+
     @classmethod
     def load(self, key: str, params: dict):
         raise Exception("Need to implement")
