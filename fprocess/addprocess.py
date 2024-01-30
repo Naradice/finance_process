@@ -36,5 +36,5 @@ def get_indicater(keys, start, end, frame=None, *params):
     eco_idc_df = pd.concat(e_indicaters, axis=1)
     if freq is not None:
         eco_idc_df = eco_idc_df.groupby(pd.Grouper(level=0, freq=freq)).first()
-        eco_idc_df = eco_idc_df.fillna(method="ffill")
+        eco_idc_df = eco_idc_df.ffill()
     return eco_idc_df

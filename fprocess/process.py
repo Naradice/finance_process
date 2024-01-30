@@ -7,10 +7,15 @@ class ProcessBase(metaclass=ABCMeta):
     def __init__(self, key: str):
         self.key = key
         self.initialization_required = False
+        self._option = {}
 
     @property
     def option(self):
-        return {}
+        return self._option
+
+    @option.setter
+    def option(self, value):
+        self._option = value
 
     @classmethod
     def load(self, key: str, params: dict):
