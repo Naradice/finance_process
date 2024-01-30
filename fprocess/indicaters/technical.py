@@ -407,9 +407,10 @@ def ATRFromMultiOHLC(
     lpc_df = abs(df[low_cn] - df[close_cn].shift(1))
 
     temp_df = pd.concat([hl_df, hpc_df, lpc_df], axis=1)
-    tr_df = pd.DataFrame(index=temp_df.index)
+    trs = {}
     for symbol in symbols:
-        tr_df[symbol] = temp_df[symbol].max(axis=1)
+        trs[symbol] = temp_df[symbol].max(axis=1)
+    tr_df = pd.concat(trs.values(), keys=trs.keys(), axis=1)
     atr_df = EMA(tr_df, window)
     elements, columns = create_multi_out_lists(symbols, [tr_df, atr_df], [tr_name, atr_name], grouped_by_symbol)
     out_df = pd.concat(elements, axis=1)
@@ -617,8 +618,8 @@ def RenkoFromSeries(data_sr: pd.Series, brick_size, total_brick_name="Renko", br
         return trend, brick_size, next_criteria_index
 
     CONST_INDEX_PLUS = 30
-    total_brick_num_sr = pd.Series(0, index=sr.index)
-    brick_value_sr = pd.Series(0, index=sr.index)
+    total_brick_num_sr = pd.Series(0, index=sr.index, dtype=float)
+    brick_value_sr = pd.Series(0, index=sr.index, dtype=float)
 
     try:
         criteria_index = sr[pd.notna(sr)].index[0]
@@ -892,7 +893,7 @@ def SlopeFromOHLCMulti(
     DFS = {}
     if grouped_by_sygnal:
         for symbol in symbols:
-            DFS[symbol] = SlopeFromOHLC(ohlc_dfs, window, (symbol, column), (symbol, slope_name))
+            DFS[symbol] = SlopeFromOHLC(ohlc_dfs, window, (symbol, column), slope_name)
     else:
         for symbol in symbols:
             DFS[symbol] = SlopeFromOHLC(ohlc_dfs, window, (column, symbol), (slope_name, symbol))
