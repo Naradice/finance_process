@@ -8,7 +8,7 @@ from typing import Union
 import numpy as np
 import pandas as pd
 
-from . import convert, standalization
+from . import convert, logger, standalization
 from .process import ProcessBase
 from .validation import get_most_frequent_delta, get_start_end_time
 
@@ -86,8 +86,17 @@ def _get_columns(df, columns, symbols=None, grouped_by_symbol=True):
                     target_columns.append(i_columns)
                 else:
                     remaining_column.append(i_columns)
-        target_columns = pd.MultiIndex.from_tuples(target_columns)
-        remaining_column = pd.MultiIndex.from_tuples(remaining_column)
+        if len(target_columns) > 0:
+            target_columns = pd.MultiIndex.from_tuples(target_columns)
+        else:
+            logger.warnings(
+                f"specified columns {columns} is not found on {df.columns} with grouped_by_symbol: {grouped_by_symbol}"
+            )
+            target_columns = []
+        if len(remaining_column) > 0:
+            remaining_column = pd.MultiIndex.from_tuples(remaining_column)
+        else:
+            remaining_column = []
     elif columns is not None and type(df.columns) == pd.MultiIndex:
         target_columns = []
         remaining_column = []
@@ -102,9 +111,17 @@ def _get_columns(df, columns, symbols=None, grouped_by_symbol=True):
                     target_columns.append(i_columns)
                 else:
                     remaining_column.append(i_columns)
-        target_columns = pd.MultiIndex.from_tuples(target_columns)
+        if len(target_columns) > 0:
+            target_columns = pd.MultiIndex.from_tuples(target_columns)
+        else:
+            target_columns = []
+            logger.warnings(
+                f"specified columns {columns} is not found on {df.columns} with grouped_by_symbol: {grouped_by_symbol}"
+            )
         if len(remaining_column) > 0:
             remaining_column = pd.MultiIndex.from_tuples(remaining_column)
+        else:
+            remaining_column = []
     else:
         target_columns = columns
         remaining_column = list(set(df.columns) - set(columns))
