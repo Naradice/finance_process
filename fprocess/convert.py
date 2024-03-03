@@ -1,4 +1,45 @@
+import datetime
+
 import pandas as pd
+
+
+def dropna_market_close(data_df: pd.DataFrame, delta_hour=10) -> pd.DataFrame:
+    """
+    drop NaN only if index is longer than delta_hour between non NaN values
+
+    Args:
+        data_df (pd.DataFrame): dataframe to drop
+        delta_hour (int): threshold hour to drop
+
+    Returns:
+        pd.DataFrame: dropped data
+    """
+    if isinstance(data_df.index, pd.DatetimeIndex):
+        nonnullindex = data_df.dropna().index
+        long_delta_cond = (nonnullindex[1:] - nonnullindex[:-1]) >= datetime.timedelta(hours=delta_hour)
+        market_close_start = nonnullindex[:-1][long_delta_cond]
+        market_close_end = nonnullindex[1:][long_delta_cond]
+        dfs = []
+
+        index = 0
+        from_index = data_df.index[0]
+        to_index = market_close_start[0]
+
+        while True:
+            market_open_df = data_df.loc[from_index:to_index]
+            dfs.append(market_open_df)
+            index += 1
+            if index >= len(market_close_start):
+                break
+            from_index = market_close_end[index - 1]
+            to_index = market_close_start[index]
+        from_index = market_close_end[index - 1]
+        to_index = data_df.index[-1]
+        market_open_df = data_df.loc[from_index:to_index]
+        dfs.append(market_open_df)
+        return pd.concat(dfs, axis=0)
+    else:
+        raise ValueError("Index support DatetimeIndex only.")
 
 
 def multisymbols_dict_to_df(data: dict) -> pd.DataFrame:
