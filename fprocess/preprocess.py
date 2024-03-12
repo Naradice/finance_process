@@ -68,6 +68,15 @@ def load_preprocess(arg: Union[str, dict]) -> list:
     return pss
 
 
+def load_default_preprocess(key: str, columns: list):
+    if key == SimpleColumnDiffPreProcess.kinds:
+        return SimpleColumnDiffPreProcess(base_column=columns[-1], target_columns=columns)
+    else:
+        for dict_key, process in get_available_processes().items():
+            if key == process.kinds or key == dict_key:
+                return process(columns=columns)
+
+
 def _get_columns(df, columns, symbols=None, grouped_by_symbol=True):
     target_columns = []
     if symbols is not None and type(df.columns) == pd.MultiIndex:
@@ -89,9 +98,7 @@ def _get_columns(df, columns, symbols=None, grouped_by_symbol=True):
         if len(target_columns) > 0:
             target_columns = pd.MultiIndex.from_tuples(target_columns)
         else:
-            logger.warnings(
-                f"specified columns {columns} is not found on {df.columns} with grouped_by_symbol: {grouped_by_symbol}"
-            )
+            logger.warnings(f"specified columns {columns} is not found on {df.columns} with grouped_by_symbol: {grouped_by_symbol}")
             target_columns = []
         if len(remaining_column) > 0:
             remaining_column = pd.MultiIndex.from_tuples(remaining_column)
@@ -115,9 +122,7 @@ def _get_columns(df, columns, symbols=None, grouped_by_symbol=True):
             target_columns = pd.MultiIndex.from_tuples(target_columns)
         else:
             target_columns = []
-            logger.warnings(
-                f"specified columns {columns} is not found on {df.columns} with grouped_by_symbol: {grouped_by_symbol}"
-            )
+            logger.warnings(f"specified columns {columns} is not found on {df.columns} with grouped_by_symbol: {grouped_by_symbol}")
         if len(remaining_column) > 0:
             remaining_column = pd.MultiIndex.from_tuples(remaining_column)
         else:
