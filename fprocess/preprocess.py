@@ -69,11 +69,12 @@ def load_preprocess(arg: Union[str, dict]) -> list:
 
 
 def load_default_preprocess(key: str, columns: list):
-    if key == SimpleColumnDiffPreProcess.kinds:
+    _key = str.lower(key)
+    if _key == str.lower(SimpleColumnDiffPreProcess.kinds):
         return SimpleColumnDiffPreProcess(base_column=columns[-1], target_columns=columns)
     else:
         for dict_key, process in get_available_processes().items():
-            if key == process.kinds or key == dict_key:
+            if _key == str.lower(process.kinds) or _key == str.lower(dict_key):
                 return process(columns=columns)
 
 
