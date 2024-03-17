@@ -151,9 +151,9 @@ class DiffPreProcess(ProcessBase):
 
     def __init__(
         self,
+        key: str = None,
         periods: int = 1,
         columns=None,
-        key: str = None,
     ):
         if key is None:
             key = f"diff_{periods}"
@@ -168,7 +168,7 @@ class DiffPreProcess(ProcessBase):
 
     @classmethod
     def load(self, key: str, params: dict):
-        return DiffPreProcess(**params, key=key)
+        return DiffPreProcess(key=key, **params)
 
     def run(self, df: pd.DataFrame, symbols: list = None, grouped_by_symbol=False) -> dict:
         remaining_columns = None
@@ -260,22 +260,22 @@ class LogPreProcess(ProcessBase):
         return np.exp(values)
 
     @classmethod
-    def load(self, params: dict):
-        process = LogPreProcess(**params)
+    def load(self, key, params: dict):
+        process = LogPreProcess(key=key, **params)
         return process
 
     @property
     def option(self):
         return {"columns": self.columns, "e": self.base_e}
 
-    def __init__(self, columns: list = None, e=None):
+    def __init__(self, key="log", columns: list = None, e=None):
         """Apply np.log for specified columns
 
         Args:
             columns (list, optional): target columns to apply np.log. Defaults to None and apply entire columns
             e (int, optional): base of log. Defaults to None and exp is used.
         """
-        super().__init__("log")
+        super().__init__(key)
         self.columns = columns
         if e is not None:
             log_base_value = np.log(e)
@@ -319,11 +319,11 @@ class IDPreProcess(ProcessBase):
         return {"columns": self.columns, "decimals": self.decimals}
 
     @classmethod
-    def load(self, params: dict):
-        process = IDPreProcess(**params)
+    def load(self, key, params: dict):
+        process = IDPreProcess(key=key, **params)
         return process
 
-    def __init__(self, columns: list = None, decimals=None, min_value=None, max_value=None, int_dtype=np.int64):
+    def __init__(self, key="id", columns: list = None, decimals=None, min_value=None, max_value=None, int_dtype=np.int64):
         """Convert Numeric values to ID (0 to X)
 
         Args:
@@ -335,7 +335,7 @@ class IDPreProcess(ProcessBase):
                 When list of int is specified, it should the same length as the columns.
                 each columns are ID
         """
-        super().__init__("id")
+        super().__init__(key)
         if decimals is None or type(decimals) is int:
             self.decimals = decimals
         elif isinstance(decimals, Iterable):
@@ -484,12 +484,13 @@ class SimpleColumnDiffPreProcess(ProcessBase):
         return {"base_column": self.base_column, "target_columns": self.columns}
 
     @classmethod
-    def load(self, params: dict):
-        process = SimpleColumnDiffPreProcess(**params)
+    def load(self, key: str, params: dict):
+        process = SimpleColumnDiffPreProcess(key=key, **params)
         return process
 
     def __init__(
         self,
+        key="scdiff",
         base_column: str = "close",
         target_columns: list = ["open", "high", "low", "close"],
     ):
@@ -500,7 +501,7 @@ class SimpleColumnDiffPreProcess(ProcessBase):
             base_column (str, optional): Defaults to "close"
             target_columns (list, optional): Defaults to ["open", "high", "low", "close"].
         """
-        super().__init__("scdiff")
+        super().__init__(key)
         if type(target_columns) is str:
             target_columns = [target_columns]
         elif isinstance(target_columns, Iterable):
@@ -581,12 +582,12 @@ class MinMaxPreProcess(ProcessBase):
 
     def __init__(
         self,
+        key: str = "minmax",
         columns=None,
         scale=(-1, 1),
         min_values=None,
         max_values=None,
         grouped_by_symbols=False,
-        key: str = "minmax",
     ):
         """Apply minimax for each column of data.
         Note that if params are not specified, mini max values are detected by data on running once only.
@@ -639,7 +640,7 @@ class MinMaxPreProcess(ProcessBase):
                 option[k] = tuple(value)
             else:
                 option[k] = value
-        process = MinMaxPreProcess(key, **option)
+        process = MinMaxPreProcess(key=key, **option)
         return process
 
     def initialize(self, data: pd.DataFrame, symbols: list = None, grouped_by_symbols=None):
@@ -756,15 +757,15 @@ class STDPreProcess(ProcessBase):
         return {"columns": self.columns, "alpha": self.alpha}
 
     @classmethod
-    def load(self, params: dict):
+    def load(self, key, params: dict):
         option = {}
         for k, value in params.items():
             option[k] = value
-        process = STDPreProcess("std", **option)
+        process = STDPreProcess(key=key, **option)
         return process
 
-    def __init__(self, columns=None, alpha=1):
-        super().__init__("std")
+    def __init__(self, key="std", columns=None, alpha=1):
+        super().__init__(key)
         if type(columns) is str:
             columns = [columns]
         elif isinstance(columns, Iterable):
