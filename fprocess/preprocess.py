@@ -10,6 +10,7 @@ import pandas as pd
 
 from . import convert, logger, standalization
 from .process import ProcessBase
+from .timeprocess import *
 from .validation import get_most_frequent_delta, get_start_end_time
 
 
@@ -21,6 +22,7 @@ def get_available_processes() -> dict:
         "SCDiff": SimpleColumnDiffPreProcess,
         "ID": IDPreProcess,
         "Log": LogPreProcess,
+        WeeklyIDProcess.kinds: WeeklyIDProcess,
     }
     return processes
 
@@ -158,7 +160,7 @@ class DiffPreProcess(ProcessBase):
         if key is None:
             key = f"diff_{periods}"
         super().__init__(key)
-        self.columns = columns
+        self.columns = columns.copy()
         self.periods = periods
         self.last_tick = None
 

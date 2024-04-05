@@ -27,6 +27,18 @@ class WeeklyIDProcess(TimeProcess):
         if self.freq < 60:
             self.min_factor = 60 // self.freq
 
+    @classmethod
+    def load(self, key: str, params: dict):
+        if "freq" in params:
+            freq = int(params["freq"])
+        else:
+            freq = 30
+        if "time_column" in params:
+            time_column = params["time_column"]
+        else:
+            time_column = "index"
+        return WeeklyIDProcess(freq, time_column)
+
     def run(self, data):
         org_index = data.index
         if self.time_column == "index" and isinstance(data.index, pd.DatetimeIndex):
@@ -35,11 +47,7 @@ class WeeklyIDProcess(TimeProcess):
         else:
             time_index = pd.DatetimeIndex(data[self.time_column])
             overwrite = True
-        time_df = (
-            ((time_index.weekday * 24 + time_index.hour + time_index.minute / 60) * self.min_factor)
-            .to_frame()
-            .convert_dtypes(int)
-        )
+        time_df = ((time_index.weekday * 24 + time_index.hour + time_index.minute / 60) * self.min_factor).to_frame().convert_dtypes(int)
         if isinstance(data.columns, pd.MultiIndex):
             time_df.columns = pd.MultiIndex.from_tuples([(self.time_column, self.time_column)])
         else:
@@ -49,7 +57,8 @@ class WeeklyIDProcess(TimeProcess):
             data[self.time_column] = time_df
             return data
         else:
-            return pd.concat([data, time_df], axis=1)
+            data = pd.concat([data, time_df], axis=1)
+            return data
 
 
 class DailyIDProcess(TimeProcess):
