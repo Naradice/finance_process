@@ -130,9 +130,12 @@ def _get_columns(df, columns, symbols=None, grouped_by_symbol=True):
             remaining_column = pd.MultiIndex.from_tuples(remaining_column)
         else:
             remaining_column = []
-    else:
+    elif columns is not None:
         target_columns = columns
         remaining_column = list(set(df.columns) - set(columns))
+    else:
+        target_columns = []
+        remaining_column = list(df.columns)
     return target_columns, remaining_column
 
 
