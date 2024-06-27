@@ -1,8 +1,6 @@
 import json
 import os
 import warnings
-from collections.abc import Iterable
-from datetime import time
 from typing import Union
 
 import numpy as np
@@ -10,8 +8,6 @@ import pandas as pd
 
 from . import convert, logger, standalization
 from .process import ProcessBase
-from .timeprocess import *
-from .validation import get_most_frequent_delta, get_start_end_time
 
 
 def get_available_processes() -> dict:
@@ -101,7 +97,9 @@ def _get_columns(df, columns, symbols=None, grouped_by_symbol=True):
         if len(target_columns) > 0:
             target_columns = pd.MultiIndex.from_tuples(target_columns)
         else:
-            logger.warnings(f"specified columns {columns} is not found on {df.columns} with grouped_by_symbol: {grouped_by_symbol}")
+            logger.warnings(
+                f"specified columns {columns} is not found on {df.columns} with grouped_by_symbol: {grouped_by_symbol}"
+            )
             target_columns = []
         if len(remaining_column) > 0:
             remaining_column = pd.MultiIndex.from_tuples(remaining_column)
@@ -125,7 +123,9 @@ def _get_columns(df, columns, symbols=None, grouped_by_symbol=True):
             target_columns = pd.MultiIndex.from_tuples(target_columns)
         else:
             target_columns = []
-            logger.warnings(f"specified columns {columns} is not found on {df.columns} with grouped_by_symbol: {grouped_by_symbol}")
+            logger.warnings(
+                f"specified columns {columns} is not found on {df.columns} with grouped_by_symbol: {grouped_by_symbol}"
+            )
         if len(remaining_column) > 0:
             remaining_column = pd.MultiIndex.from_tuples(remaining_column)
         else:
@@ -137,6 +137,8 @@ def _get_columns(df, columns, symbols=None, grouped_by_symbol=True):
 
 
 def _concat_target_and_remain(original_df, processed_df, remaining_columns):
+    if not isinstance(original_df, pd.DataFrame):
+        return processed_df
     original_columns = original_df.columns
     if remaining_columns is not None and len(remaining_columns) > 0:
         remaining_data = original_df[remaining_columns]
@@ -160,7 +162,10 @@ class DiffPreProcess(ProcessBase):
         if key is None:
             key = f"diff_{periods}"
         super().__init__(key)
-        self.columns = columns.copy()
+        if hasattr(columns, "copy"):
+            self.columns = columns.copy()
+        else:
+            self.columns = columns
         self.periods = periods
         self.last_tick = None
 
@@ -340,7 +345,7 @@ class IDPreProcess(ProcessBase):
         super().__init__(key)
         if decimals is None or type(decimals) is int:
             self.decimals = decimals
-        elif isinstance(decimals, Iterable):
+        elif isinstance(decimals, (list, set)):
             if columns is None or len(decimals) == len(columns):
                 self.decimals = decimals
             else:
@@ -506,7 +511,7 @@ class SimpleColumnDiffPreProcess(ProcessBase):
         super().__init__(key)
         if type(target_columns) is str:
             target_columns = [target_columns]
-        elif isinstance(target_columns, Iterable):
+        elif isinstance(target_columns, (list, set)):
             target_columns = list(target_columns)
         self.columns = target_columns
         self.base_column = [base_column]
@@ -539,7 +544,7 @@ class SimpleColumnDiffPreProcess(ProcessBase):
             if base_value is None:
                 base_value = self.first_value
             else:
-                if isinstance(base_value, Iterable):
+                if isinstance(base_value, (list, set)):
                     if len(base_value) > 1:
                         if isinstance(base_value, pd.Series):
                             base_value = base_value[self.base_column]
@@ -603,7 +608,7 @@ class MinMaxPreProcess(ProcessBase):
             columns (list, optional): specify column to ignore applying minimax or revert process. Defaults to []
         """
         super().__init__(key)
-        if isinstance(scale, Iterable):
+        if isinstance(scale, (list, set)):
             if len(scale) == 2 and scale[0] < scale[1]:
                 self.scale = scale
             else:
@@ -613,10 +618,10 @@ class MinMaxPreProcess(ProcessBase):
 
         if type(columns) is str:
             columns = [columns]
-        if isinstance(columns, Iterable):
+        if isinstance(columns, (list, set)):
             columns = list(set(columns))
         elif columns is not None:
-            raise TypeError("columns should be iterable")
+            raise TypeError("columns should be (list, set)")
         self.columns = columns
 
         self.initialization_required = True
@@ -770,7 +775,7 @@ class STDPreProcess(ProcessBase):
         super().__init__(key)
         if type(columns) is str:
             columns = [columns]
-        elif isinstance(columns, Iterable):
+        elif isinstance(columns, (list, set)):
             columns = list(columns)
         self.columns = columns
         if type(alpha) is int or isinstance(alpha, float):
@@ -813,3 +818,62 @@ class STDPreProcess(ProcessBase):
             return r_data
         else:
             print(f"type{type(data)} is not supported")
+
+
+class ClipPreProcess(ProcessBase):
+    kinds = "Clip"
+
+    def __init__(
+        self,
+        key: str = "clip",
+        lower: float = -1.0,
+        upper: float = 1.0,
+        columns=None,
+    ):
+        super().__init__(key)
+        if hasattr(columns, "copy"):
+            self.columns = columns.copy()
+        else:
+            self.columns = columns
+        self._lower = lower
+        self._upper = upper
+
+    @property
+    def option(self):
+        return {"lower": self._lower, "upper": self._upper, "columns": self.columns}
+
+    @classmethod
+    def load(self, key: str, params: dict):
+        return ClipPreProcess(key=key, **params)
+
+    def run(self, df: pd.DataFrame, symbols: list = None, grouped_by_symbol=False) -> dict:
+        remaining_columns = None
+        if self.columns is not None:
+            target_columns, remaining_columns = _get_columns(df, self.columns, symbols, grouped_by_symbol)
+            temp_data = df[target_columns]
+        else:
+            temp_data = df
+        temp_data = temp_data.clip(lower=self._lower, upper=self._upper)
+        data = _concat_target_and_remain(df, temp_data, remaining_columns)
+        return data
+
+    def update(self, tick: pd.Series):
+        """assuming data is previous result of run()
+
+        Args:
+            data (pd.DataFrame): previous result of run()
+            tick (pd.Series): new row data
+            option (Any, optional): Currently no option (Floor may be added later). Defaults to None.
+        """
+        new_data = tick.clip(lower=self._lower, upper=self._upper)
+        return new_data
+
+    def get_minimum_required_length(self):
+        return 1
+
+    @property
+    def revert_params(self):
+        return ("data",)
+
+    def revert(self, data, columns=None):
+        return data
