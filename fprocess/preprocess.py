@@ -8,6 +8,7 @@ import pandas as pd
 
 from . import convert, logger, standalization
 from .process import ProcessBase
+from .timeprocess import WeeklyIDProcess
 
 
 def get_available_processes() -> dict:
