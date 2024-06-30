@@ -367,7 +367,7 @@ class IDPreProcess(ProcessBase):
                 self.base_values = min_value.abs()
             else:
                 self.base_values = abs(min_value)
-            self.value_ranges = min_value + max_value
+            self.value_ranges = self.base_values + max_value
         else:
             self.base_values = None
             self.value_ranges = None
@@ -455,6 +455,10 @@ class IDPreProcess(ProcessBase):
     @property
     def revert_params(self):
         return ("data",)
+
+    @property
+    def VOCAB_SIZE(self):
+        return self.value_ranges
 
     def revert(self, data):
         if isinstance(data, pd.DataFrame):
