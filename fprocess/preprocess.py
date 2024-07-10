@@ -162,6 +162,7 @@ class DiffPreProcess(ProcessBase):
         key: str = None,
         periods: int = 1,
         columns=None,
+        dropna=False,
     ):
         if key is None:
             key = f"diff_{periods}"
@@ -172,6 +173,7 @@ class DiffPreProcess(ProcessBase):
             self.columns = columns
         self.periods = periods
         self.last_tick = None
+        self.dropna = dropna
 
     @property
     def option(self):
@@ -192,6 +194,8 @@ class DiffPreProcess(ProcessBase):
         self.last_ticks = df.iloc[-self.periods :]
         temp_data = temp_data.diff(periods=self.periods)
         data = _concat_target_and_remain(df, temp_data, remaining_columns)
+        if self.dropna:
+            data.dropna(how="any", inplace=True)
         return data
 
     def update(self, tick: pd.Series):
@@ -334,7 +338,9 @@ class IDPreProcess(ProcessBase):
         process = IDPreProcess(key=key, **params)
         return process
 
-    def __init__(self, key="id", columns: list = None, decimals=None, min_value=None, max_value=None, int_dtype=np.int64):
+    def __init__(
+        self, key="id", columns: list = None, decimals=None, min_value=None, max_value=None, start_from=0, int_dtype=np.int64
+    ):
         """Convert Numeric values to ID (0 to X)
 
         Args:
@@ -363,15 +369,14 @@ class IDPreProcess(ProcessBase):
             self.initialization_required = False
 
         if min_value is not None:
-            if isinstance(min_value, pd.Series):
-                self.base_values = min_value.abs()
-            else:
-                self.base_values = abs(min_value)
-            self.value_ranges = self.base_values + max_value
+            self.value_ranges = abs(min_value) + max_value
+            self.min_value = min_value
         else:
-            self.base_values = None
+            self.min_value = None
             self.value_ranges = None
+            self.min_value = None
         self.int_type = int_dtype
+        self.start_from = start_from
 
     def run(self, df: pd.DataFrame):
         org_columns = df.columns
@@ -381,7 +386,7 @@ class IDPreProcess(ProcessBase):
             if type(self.decimals) is int:
                 if self.decimals >= 0:
                     temp_data = temp_data.round(self.decimals)
-                temp_data = temp_data * 10**-self.decimals
+                temp_data = (temp_data - self.min_value) * 10**-self.decimals
             else:
                 temp_dfs = []
                 for index in range(len(self.decimals)):
@@ -391,13 +396,12 @@ class IDPreProcess(ProcessBase):
                         temp_df = temp_data[column]
                         if decimal >= 0:
                             temp_df = temp_df.round(decimal)
-                        temp_df = temp_df * 10**-decimal
-
+                        temp_df = (temp_df + self.min_value[column]) * 10**-decimal
                         temp_dfs.append(temp_df)
                     else:
                         temp_dfs.append(df[column])
                 temp_data = pd.concat(temp_dfs, axis=1)
-        id_df = temp_data + self.base_values
+        id_df = temp_data + self.start_from
         id_df = id_df.astype(self.int_type)
         remaining_df = df[remaining_columns]
         df = pd.concat([id_df, remaining_df], axis=1)
@@ -429,7 +433,7 @@ class IDPreProcess(ProcessBase):
                     else:
                         temp_dfs.append(df[column])
                 df = pd.concat(temp_dfs, axis=1)
-        if self.base_values is None:
+        if self.min_value is None:
             min_values = df.min()
             bases = []
             columns = []
@@ -441,8 +445,8 @@ class IDPreProcess(ProcessBase):
             if len(base_value_n) > 0:
                 bases.extend(base_value_n.abs().values)
                 columns.extend(base_value_n.index.values)
-            self.base_values = pd.Series(bases, index=columns)
-            self.value_ranges = df.max() + self.base_values
+            self.min_value = pd.Series(bases, index=columns)
+            self.value_ranges = df.max() + abs(self.min_value)
         # a_max_value = self.value_ranges.max()
         # if a_max_value < 32768:
         #     int_type = "int16"
@@ -463,7 +467,10 @@ class IDPreProcess(ProcessBase):
     def revert(self, data):
         if isinstance(data, pd.DataFrame):
             target_columns, remaining_columns = _get_columns(data, self.columns)
-            r_df = data[target_columns] - self.base_values[target_columns]
+            if isinstance(self.min_value, (pd.DataFrame, pd.Series)):
+                r_df = data[target_columns] - self.min_value[target_columns]
+            else:
+                r_df = data - self.min_value
 
             if self.decimals is not None and self.decimals != 0:
                 if type(self.decimals) is int:
