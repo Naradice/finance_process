@@ -201,6 +201,68 @@ class MACDProcess(ProcessBase):
         return out
 
 
+class MAProcess(ProcessBase):
+    kinds = "MA"
+
+    def __init__(self, key="ma", window=12, column="Close", is_input=True, is_output=True, option=None):
+        super().__init__(key)
+        self.option = {"column": column, "window": window}
+        self.last_data = None
+
+        if option is not None:
+            self.option.update(option)
+        self.KEY_EMA = f"{key}_MA"
+        self.is_input = is_input
+        self.is_output = is_output
+
+    @property
+    def columns(self):
+        return [self.KEY_EMA]
+
+    @classmethod
+    def load(self, key: str, params: dict):
+        window = params["window"]
+        column = params["column"]
+        is_input = params["input"]
+        is_out = params["output"]
+        indicater = MAProcess(key, window=window, column=column, is_input=is_input, is_output=is_out)
+        return indicater
+
+    def run(self, data: pd.DataFrame, symbols: list = [], grouped_by_symbol=False):
+        option = self.option
+        target_column = option["column"]
+        window = option["window"]
+        column = self.KEY_EMA
+
+        sma = technical.SMA(data[target_column], window)
+        sma.name = column
+
+        self.last_data = sma.iloc[-self.get_minimum_required_length() :]
+        return pd.concat([data, sma], axis=1)
+
+    def update(self, tick: pd.Series, symbols: list = []):
+        option = self.option
+        target_column = option["column"]
+        window = option["window"]
+        column = self.KEY_EMA
+
+        short_ema, long_ema, MACD = technical.update_ema(new_tick=tick, column=target_column, window=window)
+
+        new_data = pd.Series({column: short_ema})
+        self.last_data = concat(self.last_data.iloc[1:], new_data)
+        return new_data
+
+    def get_minimum_required_length(self):
+        return self.option["window"]
+
+    def revert(self, data_set: tuple):
+        # assume EMA is in 1st
+        ema = data_set[0]
+        window = self.option["window"]
+        out = technical.revert_EMA(ema, window)
+        return out
+
+
 class EMAProcess(ProcessBase):
     kinds = "EMA"
 
