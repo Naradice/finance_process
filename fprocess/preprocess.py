@@ -488,6 +488,7 @@ class IDPreProcess(ProcessBase):
                             else:
                                 temp_dfs.append(r_df[column])
                     r_df = pd.concat(temp_dfs, axis=1)
+            r_df += self.min_value
             if len(remaining_columns) > 0:
                 org_columns = data.columns
                 remaining_df = data[remaining_columns]
