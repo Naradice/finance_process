@@ -1,8 +1,6 @@
 import json
 import os
 import warnings
-from collections.abc import Iterable
-from datetime import time
 from typing import Union
 
 import numpy as np
@@ -10,7 +8,7 @@ import pandas as pd
 
 from . import convert, logger, standalization
 from .process import ProcessBase
-from .validation import get_most_frequent_delta, get_start_end_time
+from .timeprocess import WeeklyIDProcess
 
 
 def get_available_processes() -> dict:
@@ -21,6 +19,7 @@ def get_available_processes() -> dict:
         "SCDiff": SimpleColumnDiffPreProcess,
         "ID": IDPreProcess,
         "Log": LogPreProcess,
+        WeeklyIDProcess.kinds: WeeklyIDProcess,
     }
     return processes
 
@@ -66,6 +65,16 @@ def load_preprocess(arg: Union[str, dict]) -> list:
         ps = ps.load(key, param)
         pss.append(ps)
     return pss
+
+
+def load_default_preprocess(key: str, columns: list):
+    _key = str.lower(key)
+    if _key == str.lower(SimpleColumnDiffPreProcess.kinds):
+        return SimpleColumnDiffPreProcess(base_column=columns[-1], target_columns=columns)
+    else:
+        for dict_key, process in get_available_processes().items():
+            if _key == str.lower(process.kinds) or _key == str.lower(dict_key):
+                return process(columns=columns)
 
 
 def _get_columns(df, columns, symbols=None, grouped_by_symbol=True):
@@ -122,13 +131,18 @@ def _get_columns(df, columns, symbols=None, grouped_by_symbol=True):
             remaining_column = pd.MultiIndex.from_tuples(remaining_column)
         else:
             remaining_column = []
-    else:
+    elif columns is not None:
         target_columns = columns
         remaining_column = list(set(df.columns) - set(columns))
+    else:
+        target_columns = []
+        remaining_column = list(df.columns)
     return target_columns, remaining_column
 
 
 def _concat_target_and_remain(original_df, processed_df, remaining_columns):
+    if not isinstance(original_df, pd.DataFrame):
+        return processed_df
     original_columns = original_df.columns
     if remaining_columns is not None and len(remaining_columns) > 0:
         remaining_data = original_df[remaining_columns]
@@ -145,16 +159,21 @@ class DiffPreProcess(ProcessBase):
 
     def __init__(
         self,
+        key: str = None,
         periods: int = 1,
         columns=None,
-        key: str = None,
+        dropna=False,
     ):
         if key is None:
             key = f"diff_{periods}"
         super().__init__(key)
-        self.columns = columns
+        if hasattr(columns, "copy"):
+            self.columns = columns.copy()
+        else:
+            self.columns = columns
         self.periods = periods
         self.last_tick = None
+        self.dropna = dropna
 
     @property
     def option(self):
@@ -162,7 +181,7 @@ class DiffPreProcess(ProcessBase):
 
     @classmethod
     def load(self, key: str, params: dict):
-        return DiffPreProcess(**params, key=key)
+        return DiffPreProcess(key=key, **params)
 
     def run(self, df: pd.DataFrame, symbols: list = None, grouped_by_symbol=False) -> dict:
         remaining_columns = None
@@ -175,6 +194,8 @@ class DiffPreProcess(ProcessBase):
         self.last_ticks = df.iloc[-self.periods :]
         temp_data = temp_data.diff(periods=self.periods)
         data = _concat_target_and_remain(df, temp_data, remaining_columns)
+        if self.dropna:
+            data.dropna(how="any", inplace=True)
         return data
 
     def update(self, tick: pd.Series):
@@ -254,22 +275,22 @@ class LogPreProcess(ProcessBase):
         return np.exp(values)
 
     @classmethod
-    def load(self, params: dict):
-        process = LogPreProcess(**params)
+    def load(self, key, params: dict):
+        process = LogPreProcess(key=key, **params)
         return process
 
     @property
     def option(self):
         return {"columns": self.columns, "e": self.base_e}
 
-    def __init__(self, columns: list = None, e=None):
+    def __init__(self, key="log", columns: list = None, e=None):
         """Apply np.log for specified columns
 
         Args:
             columns (list, optional): target columns to apply np.log. Defaults to None and apply entire columns
             e (int, optional): base of log. Defaults to None and exp is used.
         """
-        super().__init__("log")
+        super().__init__(key)
         self.columns = columns
         if e is not None:
             log_base_value = np.log(e)
@@ -313,11 +334,13 @@ class IDPreProcess(ProcessBase):
         return {"columns": self.columns, "decimals": self.decimals}
 
     @classmethod
-    def load(self, params: dict):
-        process = IDPreProcess(**params)
+    def load(self, key, params: dict):
+        process = IDPreProcess(key=key, **params)
         return process
 
-    def __init__(self, columns: list = None, decimals=None, min_value=None, max_value=None, int_dtype=np.int64):
+    def __init__(
+        self, key="id", columns: list = None, decimals=None, min_value=None, max_value=None, start_from=0, int_dtype=np.int64
+    ):
         """Convert Numeric values to ID (0 to X)
 
         Args:
@@ -329,10 +352,10 @@ class IDPreProcess(ProcessBase):
                 When list of int is specified, it should the same length as the columns.
                 each columns are ID
         """
-        super().__init__("id")
+        super().__init__(key)
         if decimals is None or type(decimals) is int:
             self.decimals = decimals
-        elif isinstance(decimals, Iterable):
+        elif isinstance(decimals, (list, set, tuple)):
             if columns is None or len(decimals) == len(columns):
                 self.decimals = decimals
             else:
@@ -346,15 +369,14 @@ class IDPreProcess(ProcessBase):
             self.initialization_required = False
 
         if min_value is not None:
-            if isinstance(min_value, pd.Series):
-                self.base_values = min_value.abs()
-            else:
-                self.base_values = abs(min_value)
-            self.value_ranges = min_value + max_value
+            self.value_ranges = abs(min_value) + max_value
+            self.min_value = min_value
         else:
-            self.base_values = None
+            self.min_value = None
             self.value_ranges = None
+            self.min_value = None
         self.int_type = int_dtype
+        self.start_from = start_from
 
     def run(self, df: pd.DataFrame):
         org_columns = df.columns
@@ -364,7 +386,7 @@ class IDPreProcess(ProcessBase):
             if type(self.decimals) is int:
                 if self.decimals >= 0:
                     temp_data = temp_data.round(self.decimals)
-                temp_data = temp_data * 10**-self.decimals
+                temp_data = (temp_data - self.min_value) * 10**-self.decimals
             else:
                 temp_dfs = []
                 for index in range(len(self.decimals)):
@@ -374,13 +396,12 @@ class IDPreProcess(ProcessBase):
                         temp_df = temp_data[column]
                         if decimal >= 0:
                             temp_df = temp_df.round(decimal)
-                        temp_df = temp_df * 10**-decimal
-
+                        temp_df = (temp_df + self.min_value[column]) * 10**-decimal
                         temp_dfs.append(temp_df)
                     else:
                         temp_dfs.append(df[column])
                 temp_data = pd.concat(temp_dfs, axis=1)
-        id_df = temp_data + self.base_values
+        id_df = temp_data + self.start_from
         id_df = id_df.astype(self.int_type)
         remaining_df = df[remaining_columns]
         df = pd.concat([id_df, remaining_df], axis=1)
@@ -412,7 +433,7 @@ class IDPreProcess(ProcessBase):
                     else:
                         temp_dfs.append(df[column])
                 df = pd.concat(temp_dfs, axis=1)
-        if self.base_values is None:
+        if self.min_value is None:
             min_values = df.min()
             bases = []
             columns = []
@@ -424,8 +445,8 @@ class IDPreProcess(ProcessBase):
             if len(base_value_n) > 0:
                 bases.extend(base_value_n.abs().values)
                 columns.extend(base_value_n.index.values)
-            self.base_values = pd.Series(bases, index=columns)
-            self.value_ranges = df.max() + self.base_values
+            self.min_value = pd.Series(bases, index=columns)
+            self.value_ranges = df.max() + abs(self.min_value)
         # a_max_value = self.value_ranges.max()
         # if a_max_value < 32768:
         #     int_type = "int16"
@@ -439,10 +460,17 @@ class IDPreProcess(ProcessBase):
     def revert_params(self):
         return ("data",)
 
+    @property
+    def VOCAB_SIZE(self):
+        return self.value_ranges
+
     def revert(self, data):
         if isinstance(data, pd.DataFrame):
             target_columns, remaining_columns = _get_columns(data, self.columns)
-            r_df = data[target_columns] - self.base_values[target_columns]
+            if isinstance(self.min_value, (pd.DataFrame, pd.Series)):
+                r_df = data[target_columns] - self.min_value[target_columns]
+            else:
+                r_df = data - self.min_value
 
             if self.decimals is not None and self.decimals != 0:
                 if type(self.decimals) is int:
@@ -460,6 +488,7 @@ class IDPreProcess(ProcessBase):
                             else:
                                 temp_dfs.append(r_df[column])
                     r_df = pd.concat(temp_dfs, axis=1)
+            r_df += self.min_value
             if len(remaining_columns) > 0:
                 org_columns = data.columns
                 remaining_df = data[remaining_columns]
@@ -478,12 +507,13 @@ class SimpleColumnDiffPreProcess(ProcessBase):
         return {"base_column": self.base_column, "target_columns": self.columns}
 
     @classmethod
-    def load(self, params: dict):
-        process = SimpleColumnDiffPreProcess(**params)
+    def load(self, key: str, params: dict):
+        process = SimpleColumnDiffPreProcess(key=key, **params)
         return process
 
     def __init__(
         self,
+        key="scdiff",
         base_column: str = "close",
         target_columns: list = ["open", "high", "low", "close"],
     ):
@@ -494,10 +524,10 @@ class SimpleColumnDiffPreProcess(ProcessBase):
             base_column (str, optional): Defaults to "close"
             target_columns (list, optional): Defaults to ["open", "high", "low", "close"].
         """
-        super().__init__("scdiff")
+        super().__init__(key)
         if type(target_columns) is str:
             target_columns = [target_columns]
-        elif isinstance(target_columns, Iterable):
+        elif isinstance(target_columns, (list, set, tuple)):
             target_columns = list(target_columns)
         self.columns = target_columns
         self.base_column = [base_column]
@@ -530,7 +560,7 @@ class SimpleColumnDiffPreProcess(ProcessBase):
             if base_value is None:
                 base_value = self.first_value
             else:
-                if isinstance(base_value, Iterable):
+                if isinstance(base_value, (list, set, tuple)):
                     if len(base_value) > 1:
                         if isinstance(base_value, pd.Series):
                             base_value = base_value[self.base_column]
@@ -575,12 +605,12 @@ class MinMaxPreProcess(ProcessBase):
 
     def __init__(
         self,
+        key: str = "minmax",
         columns=None,
         scale=(-1, 1),
         min_values=None,
         max_values=None,
         grouped_by_symbols=False,
-        key: str = "minmax",
     ):
         """Apply minimax for each column of data.
         Note that if params are not specified, mini max values are detected by data on running once only.
@@ -594,7 +624,7 @@ class MinMaxPreProcess(ProcessBase):
             columns (list, optional): specify column to ignore applying minimax or revert process. Defaults to []
         """
         super().__init__(key)
-        if isinstance(scale, Iterable):
+        if isinstance(scale, (list, set, tuple)):
             if len(scale) == 2 and scale[0] < scale[1]:
                 self.scale = scale
             else:
@@ -604,10 +634,10 @@ class MinMaxPreProcess(ProcessBase):
 
         if type(columns) is str:
             columns = [columns]
-        if isinstance(columns, Iterable):
+        if isinstance(columns, (list, set, tuple)):
             columns = list(set(columns))
         elif columns is not None:
-            raise TypeError("columns should be iterable")
+            raise TypeError("columns should be (list, set, tuple)")
         self.columns = columns
 
         self.initialization_required = True
@@ -633,7 +663,7 @@ class MinMaxPreProcess(ProcessBase):
                 option[k] = tuple(value)
             else:
                 option[k] = value
-        process = MinMaxPreProcess(key, **option)
+        process = MinMaxPreProcess(key=key, **option)
         return process
 
     def initialize(self, data: pd.DataFrame, symbols: list = None, grouped_by_symbols=None):
@@ -750,18 +780,18 @@ class STDPreProcess(ProcessBase):
         return {"columns": self.columns, "alpha": self.alpha}
 
     @classmethod
-    def load(self, params: dict):
+    def load(self, key, params: dict):
         option = {}
         for k, value in params.items():
             option[k] = value
-        process = STDPreProcess("std", **option)
+        process = STDPreProcess(key=key, **option)
         return process
 
-    def __init__(self, columns=None, alpha=1):
-        super().__init__("std")
+    def __init__(self, key="std", columns=None, alpha=1):
+        super().__init__(key)
         if type(columns) is str:
             columns = [columns]
-        elif isinstance(columns, Iterable):
+        elif isinstance(columns, (list, set, tuple)):
             columns = list(columns)
         self.columns = columns
         if type(alpha) is int or isinstance(alpha, float):
@@ -804,3 +834,62 @@ class STDPreProcess(ProcessBase):
             return r_data
         else:
             print(f"type{type(data)} is not supported")
+
+
+class ClipPreProcess(ProcessBase):
+    kinds = "Clip"
+
+    def __init__(
+        self,
+        key: str = "clip",
+        lower: float = -1.0,
+        upper: float = 1.0,
+        columns=None,
+    ):
+        super().__init__(key)
+        if hasattr(columns, "copy"):
+            self.columns = columns.copy()
+        else:
+            self.columns = columns
+        self._lower = lower
+        self._upper = upper
+
+    @property
+    def option(self):
+        return {"lower": self._lower, "upper": self._upper, "columns": self.columns}
+
+    @classmethod
+    def load(self, key: str, params: dict):
+        return ClipPreProcess(key=key, **params)
+
+    def run(self, df: pd.DataFrame, symbols: list = None, grouped_by_symbol=False) -> dict:
+        remaining_columns = None
+        if self.columns is not None:
+            target_columns, remaining_columns = _get_columns(df, self.columns, symbols, grouped_by_symbol)
+            temp_data = df[target_columns]
+        else:
+            temp_data = df
+        temp_data = temp_data.clip(lower=self._lower, upper=self._upper)
+        data = _concat_target_and_remain(df, temp_data, remaining_columns)
+        return data
+
+    def update(self, tick: pd.Series):
+        """assuming data is previous result of run()
+
+        Args:
+            data (pd.DataFrame): previous result of run()
+            tick (pd.Series): new row data
+            option (Any, optional): Currently no option (Floor may be added later). Defaults to None.
+        """
+        new_data = tick.clip(lower=self._lower, upper=self._upper)
+        return new_data
+
+    def get_minimum_required_length(self):
+        return 1
+
+    @property
+    def revert_params(self):
+        return ("data",)
+
+    def revert(self, data, columns=None):
+        return data
