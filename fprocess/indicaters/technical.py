@@ -1,7 +1,5 @@
 import numpy as np
 import pandas as pd
-import statsmodels.api as sm
-
 
 def __create_out_lists(elements, column_names):
     out_elements = []
