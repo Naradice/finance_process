@@ -217,11 +217,9 @@ class DiffPreProcess(ProcessBase):
     def revert_params(self):
         return ("data", "base_value")
 
-    def revert(self, data, base_values=None, columns=None):
+    def revert(self, data, base_values=None, columns=None, discontinuity=False):
         if columns is None:
             columns = self.first_ticks.columns
-        if self.periods > 1:
-            warnings.warn("index should start with multiple of periods. This revert process can't care the index.")
 
         if isinstance(data, pd.DataFrame):
             available_columns = []
@@ -232,7 +230,10 @@ class DiffPreProcess(ProcessBase):
             if len(available_columns) > 0:
                 if base_values is None:
                     base_values = self.first_ticks[available_columns]
-                r_data = np.zeros_like(data)
+                if discontinuity:
+                    r_data = data.values + base_values.values
+                else:
+                    r_data = np.zeros_like(data)
                 for start_index in range(self.periods):
                     temp_values = data[start_index :: self.periods].cumsum().fillna(0)
                     r_data[start_index :: self.periods] = temp_values + base_values.iloc[start_index]
@@ -254,11 +255,16 @@ class DiffPreProcess(ProcessBase):
                             raise ValueError("can't determin column axis in the positions")
                         columns = columns[feature_size]
                         warnings.warn(f"assume axis=1:{data.shape[1]} is a part of columns")
-            r_data = np.zeros_like(data)
-            for start_index in range(self.periods):
-                temp_values = np.cumsum(data[start_index :: self.periods], axis=axis)
-                temp_values = np.nan_to_num(temp_values)
-                r_data[start_index :: self.periods] = temp_values + base_values
+            if isinstance(base_values, pd.DataFrame):
+                base_values = base_values.values
+            if discontinuity:
+                r_data = data + base_values
+            else:
+                r_data = np.zeros_like(data)
+                for start_index in range(self.periods):
+                    temp_values = np.cumsum(data[start_index :: self.periods], axis=axis)
+                    temp_values = np.nan_to_num(temp_values)
+                    r_data[start_index :: self.periods] = temp_values + base_values[start_index]
             return r_data
 
         else:
