@@ -85,7 +85,7 @@ class MACDProcess(ProcessBase):
 
         self.KEY_SHORT_EMA = f"{key}_S_EMA"
         self.KEY_LONG_EMA = f"{key}_L_EMA"
-        self.KEY_MACD = f"{key}_MACD"
+        self.KEY_MACD = "MACD"
         self.KEY_SIGNAL = f"{key}_Signal"
         self.is_input = is_input
         self.is_output = is_output
@@ -273,7 +273,7 @@ class EMAProcess(ProcessBase):
 
         if option is not None:
             self.option.update(option)
-        self.KEY_EMA = f"{key}_EMA"
+        self.KEY_EMA = key
         self.is_input = is_input
         self.is_output = is_output
 
@@ -344,6 +344,7 @@ class BBANDProcess(ProcessBase):
         self.KEY_UPPER_VALUE = f"{key}_UV"
         self.KEY_LOWER_VALUE = f"{key}_LV"
         self.KEY_WIDTH_VALUE = f"{key}_Width"
+        self.KEY_STD_VALUE = f"{key}_Std"
 
         self.is_input = is_input
         self.is_output = is_output
@@ -366,10 +367,6 @@ class BBANDProcess(ProcessBase):
         target_column = option["column"]
         window = option["window"]
         alpha = option["alpha"]
-        c_ema = self.KEY_MEAN_VALUE
-        c_ub = self.KEY_UPPER_VALUE
-        c_lb = self.KEY_LOWER_VALUE
-        c_width = self.KEY_WIDTH_VALUE
 
         if type(data.columns) == pd.MultiIndex:
             if len(symbols) == 0:
@@ -381,11 +378,11 @@ class BBANDProcess(ProcessBase):
                 window=window,
                 alpha=alpha,
                 grouped_by_symbol=grouped_by_symbol,
-                mean_name=c_ema,
-                upper_name=c_ub,
-                lower_name=c_lb,
-                width_name=c_width,
-                std_name=None,
+                mean_name=self.KEY_MEAN_VALUE,
+                upper_name=self.KEY_UPPER_VALUE,
+                lower_name=self.KEY_LOWER_VALUE,
+                width_name=self.KEY_WIDTH_VALUE,
+                std_name=self.KEY_STD_VALUE
             )
         else:
             bb_df = technical.BolingerFromOHLC(
@@ -393,11 +390,11 @@ class BBANDProcess(ProcessBase):
                 target_column,
                 window=window,
                 alpha=alpha,
-                mean_name=c_ema,
-                upper_name=c_ub,
-                lower_name=c_lb,
-                width_name=c_width,
-                std_name=None,
+                mean_name=self.KEY_MEAN_VALUE,
+                upper_name=self.KEY_UPPER_VALUE,
+                lower_name=self.KEY_LOWER_VALUE,
+                width_name=self.KEY_WIDTH_VALUE,
+                std_name=self.KEY_STD_VALUE
             )
 
         self.last_data = bb_df.iloc[-self.get_minimum_required_length() :]
@@ -444,7 +441,7 @@ class ATRProcess(ProcessBase):
             self.option.update(option)
 
         self.last_data = None
-        self.KEY_ATR = f"{key}_ATR"
+        self.KEY_ATR = key
         self.is_input = is_input
         self.is_output = is_output
 
@@ -510,9 +507,9 @@ class RSIProcess(ProcessBase):
             self.option.update(option)
 
         self.last_data = None
-        self.KEY_RSI = f"{key}_RSI"
-        self.KEY_GAIN = f"{key}_AVG_GAIN"
-        self.KEY_LOSS = f"{key}_AVG_LOSS"
+        self.KEY_RSI = key
+        self.KEY_GAIN = f"{key}_Gain"
+        self.KEY_LOSS = f"{key}_Loss"
 
         self.is_input = is_input
         self.is_output = is_output
@@ -720,7 +717,7 @@ class CCIProcess(ProcessBase):
         self.data = None
         self.is_input = is_input
         self.is_output = is_output
-        self.KEY_CCI = f"{key}_cci"
+        self.KEY_CCI = key
 
     @property
     def columns(self):
@@ -918,6 +915,7 @@ class RangeTrendProcess(ProcessBase):
         period = 1
         width_diff = data[width_column].diff()
         width_diff[width_diff == 0] = numpy.nan
+        width_diff.ffill(inplace=True)
         pct_change = width_diff.pct_change(periods=period)
         pct_normalized = pct_change / pct_change.std()
         range_possibility_dfs = 1 / (1 + pct_normalized.abs())
@@ -941,6 +939,7 @@ class RangeTrendProcess(ProcessBase):
                 period += 1
                 width_dff = data_[width_column].shift(periods=period - 1).diff()
                 width_dff[width_dff == 0] = numpy.nan
+                width_dff.ffill(inplace=True)
                 pct_change = width_dff.pct_change(periods=period)
                 pct_normalized = pct_change / pct_change.std()
                 pct_change = 1 / (1 + pct_normalized.abs())

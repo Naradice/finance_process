@@ -58,6 +58,19 @@ def get_columns_of_symbol(df: pd.DataFrame, symbol: str = None) -> pd.Index:
     return columns
 
 
+def get_symbols(df: pd.DataFrame):
+    symbols = df.columns
+    if isinstance(symbols, pd.MultiIndex):
+        if is_grouped_by_symbol(symbols):
+            symbols = symbols.droplevel(1)
+        else:
+            symbols = symbols.droplevel(0)
+        symbols = list(dict.fromkeys(symbols))
+    else:
+        symbols = None
+    return symbols
+
+
 def get_ohlc_columns(df: pd.DataFrame, symbol: str = None) -> dict:
     """returns column names of ohlc data.
 

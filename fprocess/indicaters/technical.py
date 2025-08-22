@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 
+
 def __create_out_lists(elements, column_names):
     out_elements = []
     out_columns = []
@@ -439,7 +440,11 @@ def ATRFromOHLC(data: pd.DataFrame, ohlc_columns=("Open", "High", "Low", "Close"
     df["L-PC"] = abs(df[low_cn] - df[close_cn].shift(1))
     df[tr_name] = df[["H-L", "H-PC", "L-PC"]].max(axis=1)
     df[atr_name] = EMA(df[tr_name], interval=window)
-    return df[[tr_name, atr_name]].copy()
+    if tr_name is not None:
+        return df[[tr_name, atr_name]].copy()
+    else:
+        return df[atr_name].copy()
+    
 
 
 def update_ATR(
@@ -963,3 +968,194 @@ def CommodityChannelIndexMulti(
         cci.columns = cci.columns.swaplevel(0, 1)
 
     return cci
+
+def bearish_engulfing(df, open_column, close_column):
+    prev = df.shift(1)
+    return (
+        (prev[close_column] > prev[open_column]) &
+        (df[close_column] < df[open_column]) &
+        (df[open_column] > prev[close_column]) &
+        (df[close_column] < prev[open_column])
+    )
+
+def bullish_engulfing(df, open_column, close_column):
+    prev = df.shift(1)
+    return (
+        (prev[close_column] < prev[open_column]) &
+        (df[close_column] > df[open_column]) &
+        (df[open_column] < prev[close_column]) &
+        (df[close_column] > prev[open_column])
+    )
+
+def bearish_pinbar(df, ohlc_columns, ratio=2.0):  # 上ヒゲが長い陰性寄り
+    open_column, high_column, low_column, close_column = ohlc_columns
+    body = (df[close_column] - df[open_column]).abs()
+    upper = df[high_column] - df[[open_column, close_column]].max(axis=1)
+    lower = df[[open_column, close_column]].min(axis=1) - df[low_column]
+    return (upper > body * ratio) & (lower < body) & (df[close_column] <= df[open_column])
+
+def bullish_pinbar(df, ohlc_columns, ratio=2.0):  # 下ヒゲが長い陽性寄り
+    open_column, high_column, low_column, close_column = ohlc_columns
+    body = (df[close_column] - df[open_column]).abs()
+    lower = df[[open_column, close_column]].min(axis=1) - df[low_column]
+    upper = df[high_column] - df[[open_column, close_column]].max(axis=1)
+    return (lower > body * ratio) & (upper < body) & (df[close_column] >= df[open_column])
+
+def bearish_outside(df, ohlc_columns):
+    open_column, high_column, low_column, close_column = ohlc_columns
+    prev = df.shift(1)
+    return (df[high_column] > prev[high_column]) & (df[low_column] < prev[low_column]) & (df[close_column] < df[open_column])
+
+def bullish_outside(df, ohlc_columns):
+    open_column, high_column, low_column, close_column = ohlc_columns
+    prev = df.shift(1)
+    return (df[high_column] > prev[high_column]) & (df[low_column] < prev[low_column]) & (df[close_column] > df[open_column])
+
+# utilities for scoring
+def _norm_clip(x, lo, hi):
+    """x を [lo, hi] にクリップして 0..1 に正規化"""
+    x = np.clip(x, lo, hi)
+    return (x - lo) / (hi - lo)
+
+def _trend_alignment(df, side: str, close_column, short_column, long_column):
+    """
+    トレンド整合性: 
+    強気= Close>MA200 & MA20>MA200 でボーナス、弱気は逆。
+    1.10, 1.00, 0.90 の3段で重みを返す。
+    """
+    above200 = df[close_column] > df[long_column]
+    ma20_above = df[short_column] > df[long_column]
+
+    if side == 'bull':
+        good = above200 & ma20_above
+        bad = (~above200) & (~ma20_above)
+    else:  # bear
+        good = (~above200) & (~ma20_above)
+        bad = above200 & ma20_above
+
+    w = pd.Series(1.00, index=df.index, dtype=float)
+    w[good] = 1.10
+    w[bad]  = 0.90
+    return w
+
+def _zone_confluence(df, high_column, low_column, zone=None):
+    """
+    ゾーン合致: 価格帯に触れていれば 1.10、近傍(±0.05円)なら 1.05、その他 1.00
+    zone=(low, high) を想定。None なら 1.00。
+    """
+    if not zone:
+        return pd.Series(1.00, index=df.index, dtype=float)
+    zlo, zhi = zone
+    touch = (df[high_column] >= zlo) & (df[low_column] <= zhi)
+    near  = (~touch) & (
+        ((zlo - df[high_column]).abs() <= 0.05) | ((df[low_column] - zhi).abs() <= 0.05)
+    )
+    w = pd.Series(1.00, index=df.index, dtype=float)
+    w[near]  = 1.05
+    w[touch] = 1.10
+    return w
+
+def _body_quality(df, body_column, atr_column):
+    """実体/ATR を 0.5..2.0 にクリップして 0..1 正規化（大きいほど良い）"""
+    ratio = (df[body_column] / df[atr_column]).replace([np.inf, -np.inf], np.nan)
+    return _norm_clip(ratio, 0.5, 2.0)
+
+def _closepos_quality(df, side: str, closepos_column):
+    """
+    終値の位置: 強気は高値寄り(=ClosePos高い)が良い、弱気は安値寄りが良い
+    """
+    cp = df[closepos_column].clip(0, 1)
+    return cp if side == 'bull' else (1 - cp)
+
+def _pinbar_shadow_quality(df, side: str, body_column, ohlc_columns, max_ratio=5.0):
+    """ピンバー専用：長い側のヒゲ/実体 を 2..max_ratio で 0..1 に正規化"""
+    body = df[body_column].replace(0, np.nan)
+    open_columns, high_columns, low_columns, close_columns = ohlc_columns
+    upper = df[high_columns] - df[[open_columns, close_columns]].max(axis=1)
+    lower = df[[open_columns, close_columns]].min(axis=1) - df[low_columns]
+    if side == 'bull':
+        ratio = (lower / body)
+    else:
+        ratio = (upper / body)
+    return _norm_clip(ratio, 2.0, max_ratio)
+
+def _engulf_depth_quality(df, side: str, body_column, open_columns, close_columns, max_ratio=3.0):
+    """
+    包み足の「包み込みの力」：現足実体 / 前足実体 を 1..max_ratio で 0..1 に正規化
+    """
+    prev_body = (df[close_columns].shift(1) - df[open_columns].shift(1)).abs().replace(0, np.nan)
+    ratio = (df[body_column] / prev_body)
+    return _norm_clip(ratio, 1.0, max_ratio)
+
+def score_price_action(df: pd.DataFrame, side: str, ohlc_columns, atr_column, short_ma_column, long_ma_column, zone=None) -> pd.DataFrame:
+    """
+    side: 'bull' or 'bear'
+    zone: (low, high) or None
+    戻り値: パターン別スコアと総合スコア
+    """
+    assert side in ('bull', 'bear')
+    open_column, high_column, low_column, close_column = ohlc_columns
+    BODY_COLUMN = 'Body'
+    CLOSE_POS_COLUMN = 'ClosePos'
+    # 実体サイズと終値の相対位置（0=安値寄り, 1=高値寄り）
+    df[BODY_COLUMN] = (df[close_column] - df[open_column]).abs()
+    df[CLOSE_POS_COLUMN] = (df[close_column] - df[low_column]) / (df[high_column] - df[low_column]).replace(0, np.nan)
+
+    if side == 'bull':
+        engulf = bullish_engulfing(df, open_column, close_column)
+        pinbar = bullish_pinbar(df, ohlc_columns)
+        outside = bullish_outside(df, ohlc_columns)
+    else:
+        engulf = bearish_engulfing(df, open_column, close_column)
+        pinbar = bearish_pinbar(df, ohlc_columns)
+        outside = bearish_outside(df, ohlc_columns)
+
+    # サブスコア（0..1）
+    body_q = _body_quality(df, body_column=BODY_COLUMN, atr_column=atr_column)
+    close_q = _closepos_quality(df, side, CLOSE_POS_COLUMN)
+    trend_w = _trend_alignment(df, side, close_column, short_ma_column, long_ma_column)
+    zone_w  = _zone_confluence(df, high_column, low_column, zone)
+
+    # パターン別の質（0..1）
+    engulf_q = _engulf_depth_quality(df, side, BODY_COLUMN, open_column, close_column)
+    pinbar_q = _pinbar_shadow_quality(df, side, BODY_COLUMN, ohlc_columns)
+
+    # ベース重み
+    base_w = {
+        'engulf': 0.60,   # 包み足
+        'outside': 0.55,  # アウトサイドバー
+        'pinbar': 0.45    # ピンバー
+    }
+
+    # パターン別スコア（0..100換算前に 0..1 で作る）
+    # 係数は経験則：body 0.4, close 0.2, 専用質 0.4（engulf/pinbar）。outside は専用質なしで body/close を厚めに。
+    engulf_score01 = engulf.astype(float) * base_w['engulf'] * (
+        0.4 * body_q + 0.2 * close_q + 0.4 * engulf_q
+    )
+    pinbar_score01 = pinbar.astype(float) * base_w['pinbar'] * (
+        0.4 * body_q + 0.2 * close_q + 0.4 * pinbar_q
+    )
+    outside_score01 = outside.astype(float) * base_w['outside'] * (
+        0.55 * body_q + 0.45 * close_q
+    )
+
+    # コンフルエンス重み適用
+    confluence_w = trend_w * zone_w  # おおむね 0.90〜1.21
+    engulf_score01 *= confluence_w
+    pinbar_score01 *= confluence_w
+    outside_score01 *= confluence_w
+
+    # 総合スコア：最大を採用（「最も強いシグナル」を重視）
+    total01 = np.maximum.reduce([engulf_score01, pinbar_score01, outside_score01])
+    total = (total01 * 100).clip(0, 100)
+
+    # 出力
+    out = df.copy()
+    out[f'{side}_engulfing'] = engulf
+    out[f'{side}_pinbar'] = pinbar
+    out[f'{side}_outside'] = outside
+    out[f'{side}_engulf_score'] = (engulf_score01 * 100).round(1)
+    out[f'{side}_pinbar_score'] = (pinbar_score01 * 100).round(1)
+    out[f'{side}_outside_score'] = (outside_score01 * 100).round(1)
+    out[f'{side}_confidence'] = total.round(1)
+    return out
